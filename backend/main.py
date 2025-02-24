@@ -5,25 +5,26 @@ from fastapi import FastAPI, File, UploadFile, HTTPException
 from model_pipeline import prepare_data, train_gbm, evaluate_model, save_model, load_model
 import mlflow
 import mlflow.sklearn
+import pandas as pd
+import argparse
 
-# Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 app = FastAPI()
 
-# Define paths
 DATA_DIR = "data"
 MODEL_DIR = "models"
 RAW_DATA_DIR = os.path.join(DATA_DIR, "raw_data")
+train_path = os.path.join(RAW_DATA_DIR, "churn-bigml-80.csv")
+test_path = os.path.join(RAW_DATA_DIR, "churn-bigml-20.csv")
 PREPARED_DATA_PATH = os.path.join(DATA_DIR, "prepared_data.joblib")
 MODEL_PATH = os.path.join(MODEL_DIR, "GBM_model.joblib")
 MLFLOW_TRACKING_URI = "http://mlflow:5000"
 
-# Ensure directories exist
 os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(MODEL_DIR, exist_ok=True)
+os.makedirs(RAW_DATA_DIR, exist_ok=True)
 
-# MLflow setup
 mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
 mlflow.set_experiment("GBM_Experiment")
 
@@ -34,9 +35,8 @@ def home():
 @app.post("/prepare_data")
 async def prepare_data_endpoint(train_file: UploadFile = File(...), test_file: UploadFile = File(...)):
     try:
-        train_path = os.path.join(RAW_DATA_DIR, "train.csv")
-        test_path = os.path.join(RAW_DATA_DIR, "test.csv")
-        os.makedirs(RAW_DATA_DIR, exist_ok=True)
+        train_path = os.path.join(RAW_DATA_DIR, "churn-bigml-80.csv")
+        test_path = os.path.join(RAW_DATA_DIR, "churn-bigml-20.csv")
         with open(train_path, "wb") as f:
             f.write(await train_file.read())
         with open(test_path, "wb") as f:
@@ -101,3 +101,55 @@ def predict(file: UploadFile = File(...)):
     except Exception as e:
         logging.error(f"Prediction error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/login")
+def login(data: dict):
+    username = data.get("username")
+    password = data.get("password")
+    if username == "admin" and password == "password123":
+        return {"status": "success", "message": "Login successful"}
+    else:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+def run_pipeline(args):
+    try:
+        if args.prepare_data:
+            logging.info("Starting data preparation...")
+            X_train, X_test, y_train, y_test = prepare_data(train_path, test_path)
+            joblib.dump((X_train, X_test, y_train, y_test), PREPARED_DATA_PATH)
+            logging.info("Data preparation completed and saved.")
+
+        if args.train:
+            logging.info("Training the Gradient Boosting Model...")
+            X_train, X_test, y_train, y_test = joblib.load(PREPARED_DATA_PATH)
+            gbm_model = train_gbm(X_train, y_train)
+            save_model(gbm_model, MODEL_DIR)
+            logging.info("Model training completed and saved.")
+
+        if args.evaluate:
+            logging.info("Evaluating the model...")
+            model = load_model(MODEL_PATH)
+            X_train, X_test, y_train, y_test = joblib.load(PREPARED_DATA_PATH)
+            metrics = evaluate_model(model, X_test, y_test)
+            print("\nModel Performance:")
+            print(f"Accuracy: {metrics['accuracy']:.4f}")
+            print(f"ROC AUC Score: {metrics['roc_auc']:.4f}")
+            print("\nClassification Report:\n")
+            print(metrics["classification_report"])
+            logging.info("Model evaluation completed.")
+
+    except Exception as e:
+        logging.error(f"Pipeline execution failed: {str(e)}")
+        raise
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Run parts of the ML pipeline.")
+    parser.add_argument("--prepare_data", action="store_true", help="Run data preparation.")
+    parser.add_argument("--train", action="store_true", help="Train the model.")
+    parser.add_argument("--evaluate", action="store_true", help="Evaluate the model.")
+    args = parser.parse_args()
+    if any([args.prepare_data, args.train, args.evaluate]):
+        run_pipeline(args)
+    else:
+        import uvicorn
+        uvicorn.run(app, host="0.0.0.0", port=8000)

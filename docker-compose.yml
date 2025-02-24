@@ -2,7 +2,7 @@ version: "3"
 
 services:
   backend:
-    build: ./backend
+    image: essaidimaryem/ml-project-backend:latest
     container_name: backend
     ports:
       - "8000:8000"
@@ -13,7 +13,7 @@ services:
       - ml_network
 
   frontend:
-    build: ./frontend
+    image: essaidimaryem/ml-project-frontend:latest
     container_name: frontend
     depends_on:
       - backend
