@@ -1,0 +1,38 @@
+version: "3"
+
+services:
+  backend:
+    build: ./backend
+    container_name: backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./models:/app/models
+    networks:
+      - ml_network
+
+  frontend:
+    build: ./frontend
+    container_name: frontend
+    depends_on:
+      - backend
+    ports:
+      - "8501:8501"
+    networks:
+      - ml_network
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:latest
+    container_name: mlflow
+    command: ["mlflow", "server", "--host", "0.0.0.0"]
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./mlruns:/mlruns
+    networks:
+      - ml_network
+
+networks:
+  ml_network:
+    driver: bridge
