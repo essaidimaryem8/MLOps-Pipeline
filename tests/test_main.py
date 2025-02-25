@@ -8,7 +8,7 @@ import numpy as np
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'backend')))
 
 try:
-    from model_pipeline import train_gbm
+    from model_pipeline.training import train_gbm
 except ModuleNotFoundError:
     pytest.exit("Error: model_pipeline.py not found or not importable.")
 
