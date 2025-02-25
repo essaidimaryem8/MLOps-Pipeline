@@ -31,9 +31,11 @@ os.makedirs(RAW_DATA_DIR, exist_ok=True)
 mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
 mlflow.set_experiment("GBM_Experiment")
 
+
 @app.get("/")
 def home():
     return {"message": "Backend API is running"}
+
 
 @app.post("/prepare_data")
 async def prepare_data_endpoint(train_file: UploadFile = File(...), test_file: UploadFile = File(...)):
@@ -44,7 +46,7 @@ async def prepare_data_endpoint(train_file: UploadFile = File(...), test_file: U
             f.write(await train_file.read())
         with open(test_path_api, "wb") as f:
             f.write(await test_file.read())
-        
+
         with mlflow.start_run(run_name="Data Preparation"):
             logging.info("Starting data preparation...")
             df_train = pd.read_csv(train_path_api)
@@ -61,12 +63,13 @@ async def prepare_data_endpoint(train_file: UploadFile = File(...), test_file: U
         logging.error(f"Error in data preparation: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.post("/train")
 def train():
     try:
         if not os.path.exists(PREPARED_DATA_PATH):
             raise HTTPException(status_code=400, detail="Prepared data not found. Run /prepare_data first.")
-        
+
         with mlflow.start_run(run_name="Model Training"):
             logging.info("Training the Gradient Boosting Model...")
             X_train, X_test, y_train, y_test, _ = joblib.load(PREPARED_DATA_PATH)
@@ -81,6 +84,7 @@ def train():
         logging.error(f"Error in training: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.get("/evaluate")
 def evaluate():
     try:
@@ -88,7 +92,7 @@ def evaluate():
             raise HTTPException(status_code=400, detail="Model not found. Run /train first.")
         if not os.path.exists(PREPARED_DATA_PATH):
             raise HTTPException(status_code=400, detail="Prepared data not found. Run /prepare_data first.")
-        
+
         with mlflow.start_run(run_name="Model Evaluation"):
             logging.info("Evaluating the model...")
             model = load_model(MODEL_PATH)
@@ -102,12 +106,13 @@ def evaluate():
         logging.error(f"Evaluation error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.post("/predict")
 def predict(file: UploadFile = File(...)):
     try:
         if not os.path.exists(MODEL_PATH):
             raise HTTPException(status_code=400, detail="Model not found. Run /train first.")
-        
+
         with mlflow.start_run(run_name="Prediction"):
             model = load_model(MODEL_PATH)
             df = pd.read_csv(file.file)
@@ -121,12 +126,13 @@ def predict(file: UploadFile = File(...)):
         logging.error(f"Prediction error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.post("/retrain")  # New endpoint for excellence
 def retrain():
     try:
         if not os.path.exists(PREPARED_DATA_PATH):
             raise HTTPException(status_code=400, detail="Prepared data not found. Run /prepare_data first.")
-        
+
         with mlflow.start_run(run_name="Model Retraining"):
             logging.info("Retraining the Gradient Boosting Model...")
             X_train, X_test, y_train, y_test, _ = joblib.load(PREPARED_DATA_PATH)
@@ -141,6 +147,7 @@ def retrain():
         logging.error(f"Error in retraining: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.post("/login")
 def login(data: dict):
     username = data.get("username")
@@ -149,6 +156,7 @@ def login(data: dict):
         return {"status": "success", "message": "Login successful"}
     else:
         raise HTTPException(status_code=401, detail="Invalid credentials")
+
 
 def run_pipeline(args):
     try:
@@ -217,6 +225,7 @@ def run_pipeline(args):
     except Exception as e:
         logging.error(f"Pipeline execution failed: {str(e)}")
         raise
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run parts of the ML pipeline or start FastAPI server.")
