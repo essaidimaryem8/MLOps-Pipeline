@@ -7,7 +7,8 @@ st.set_page_config(page_title="ML App", layout="wide", initial_sidebar_state="ex
 st.sidebar.title("Navigation")
 page = st.sidebar.radio("Go to", ["Prepare Data", "Train Model", "Evaluate Model", "Predict", "Profile", "Login"])
 
-backend_url = "http://backend:8000"
+# Update backend_url for local testing
+backend_url = "http://localhost:8000"
 
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
