@@ -15,6 +15,12 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 
 app = FastAPI()
 
+# Use environment variable to determine if running in GitHub Actions
+if os.getenv("GITHUB_ACTIONS", "false") == "true":
+    MLFLOW_TRACKING_URI = "file://./mlruns"  # Local file-based store for CI
+else:
+    MLFLOW_TRACKING_URI = "http://mlflow:5000"  # Docker Compose for local/testing
+
 DATA_DIR = "data"
 MODEL_DIR = "models"
 RAW_DATA_DIR = os.path.join(DATA_DIR, "raw_data")
@@ -22,7 +28,6 @@ train_path = os.path.join(RAW_DATA_DIR, "churn-bigml-80.csv")
 test_path = os.path.join(RAW_DATA_DIR, "churn-bigml-20.csv")
 PREPARED_DATA_PATH = os.path.join(DATA_DIR, "prepared_data.joblib")
 MODEL_PATH = os.path.join(MODEL_DIR, "GBM_model.joblib")
-MLFLOW_TRACKING_URI = "http://mlflow:5000"
 
 os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(MODEL_DIR, exist_ok=True)
@@ -46,17 +51,15 @@ async def prepare_data_endpoint(train_file: UploadFile = File(...), test_file: U
             f.write(await train_file.read())
         with open(test_path_api, "wb") as f:
             f.write(await test_file.read())
-
-        with mlflow.start_run(run_name="Data Preparation"):
+        
+        with mlflow.start_run(run_name="Data Preparation") if MLFLOW_TRACKING_URI.startswith("http") else mlflow.start_run(run_name="Data Preparation", tracking_uri=MLFLOW_TRACKING_URI):
             logging.info("Starting data preparation...")
-            df_train = pd.read_csv(train_path_api)
-            df_test = pd.read_csv(test_path_api)
-            X_train, y_train, train_info = preprocess_data(df_train, is_train=True)
-            X_test, y_test, _ = preprocess_data(df_test, is_train=False)
-            joblib.dump((X_train, X_test, y_train, y_test, train_info), PREPARED_DATA_PATH)
-            mlflow.log_param("train_file", train_path_api)
-            mlflow.log_param("test_file", test_path_api)
-            mlflow.log_artifact(PREPARED_DATA_PATH)
+            X_train, X_test, y_train, y_test = prepare_data(train_path_api, test_path_api)
+            joblib.dump((X_train, X_test, y_train, y_test), PREPARED_DATA_PATH)
+            if MLFLOW_TRACKING_URI.startswith("http"):
+                mlflow.log_param("train_file", train_path_api)
+                mlflow.log_param("test_file", test_path_api)
+                mlflow.log_artifact(PREPARED_DATA_PATH)
             logging.info("Data preparation completed and saved.")
         return {"status": "Data prepared successfully"}
     except Exception as e:
@@ -70,14 +73,15 @@ def train():
         if not os.path.exists(PREPARED_DATA_PATH):
             raise HTTPException(status_code=400, detail="Prepared data not found. Run /prepare_data first.")
 
-        with mlflow.start_run(run_name="Model Training"):
+        with mlflow.start_run(run_name="Model Training") if MLFLOW_TRACKING_URI.startswith("http") else mlflow.start_run(run_name="Model Training", tracking_uri=MLFLOW_TRACKING_URI):
             logging.info("Training the Gradient Boosting Model...")
-            X_train, X_test, y_train, y_test, _ = joblib.load(PREPARED_DATA_PATH)
+            X_train, X_test, y_train, y_test = joblib.load(PREPARED_DATA_PATH)
             gbm_model = train_gbm(X_train, y_train)
             save_model(gbm_model, MODEL_DIR)
-            mlflow.sklearn.log_model(gbm_model, "model")
-            mlflow.log_param("n_estimators", 120)
-            mlflow.log_param("learning_rate", 0.08)
+            if MLFLOW_TRACKING_URI.startswith("http"):
+                mlflow.sklearn.log_model(gbm_model, "model")
+                mlflow.log_param("n_estimators", 120)
+                mlflow.log_param("learning_rate", 0.08)
             logging.info("Model training completed and saved.")
         return {"status": "Model trained successfully"}
     except Exception as e:
@@ -93,13 +97,14 @@ def evaluate():
         if not os.path.exists(PREPARED_DATA_PATH):
             raise HTTPException(status_code=400, detail="Prepared data not found. Run /prepare_data first.")
 
-        with mlflow.start_run(run_name="Model Evaluation"):
+        with mlflow.start_run(run_name="Model Evaluation") if MLFLOW_TRACKING_URI.startswith("http") else mlflow.start_run(run_name="Model Evaluation", tracking_uri=MLFLOW_TRACKING_URI):
             logging.info("Evaluating the model...")
             model = load_model(MODEL_PATH)
-            X_train, X_test, y_train, y_test, _ = joblib.load(PREPARED_DATA_PATH)
+            X_train, X_test, y_train, y_test = joblib.load(PREPARED_DATA_PATH)
             metrics = evaluate_model(model, X_test, y_test)
-            mlflow.log_metrics({"accuracy": metrics["accuracy"], "roc_auc": metrics["roc_auc"]})
-            mlflow.log_artifact(MODEL_PATH)
+            if MLFLOW_TRACKING_URI.startswith("http"):
+                mlflow.log_metrics({"accuracy": metrics["accuracy"], "roc_auc": metrics["roc_auc"]})
+                mlflow.log_artifact(MODEL_PATH)
             logging.info("Model evaluation completed.")
         return metrics
     except Exception as e:
@@ -113,14 +118,13 @@ def predict(file: UploadFile = File(...)):
         if not os.path.exists(MODEL_PATH):
             raise HTTPException(status_code=400, detail="Model not found. Run /train first.")
 
-        with mlflow.start_run(run_name="Prediction"):
+        with mlflow.start_run(run_name="Prediction") if MLFLOW_TRACKING_URI.startswith("http") else mlflow.start_run(run_name="Prediction", tracking_uri=MLFLOW_TRACKING_URI):
             model = load_model(MODEL_PATH)
             df = pd.read_csv(file.file)
             X, _, _ = preprocess_data(df, is_train=False)
             predictions = model.predict(X)
-            mlflow.log_param("prediction_file", file.filename)
-            # Store predictions in a database (e.g., PostgreSQL) - optional for excellence
-            # For now, return predictions
+            if MLFLOW_TRACKING_URI.startswith("http"):
+                mlflow.log_param("prediction_file", file.filename)
         return {"predictions": predictions.tolist()}
     except Exception as e:
         logging.error(f"Prediction error: {str(e)}")
@@ -133,14 +137,15 @@ def retrain():
         if not os.path.exists(PREPARED_DATA_PATH):
             raise HTTPException(status_code=400, detail="Prepared data not found. Run /prepare_data first.")
 
-        with mlflow.start_run(run_name="Model Retraining"):
+        with mlflow.start_run(run_name="Model Retraining") if MLFLOW_TRACKING_URI.startswith("http") else mlflow.start_run(run_name="Model Retraining", tracking_uri=MLFLOW_TRACKING_URI):
             logging.info("Retraining the Gradient Boosting Model...")
-            X_train, X_test, y_train, y_test, _ = joblib.load(PREPARED_DATA_PATH)
+            X_train, X_test, y_train, y_test = joblib.load(PREPARED_DATA_PATH)
             gbm_model = train_gbm(X_train, y_train)
             save_model(gbm_model, MODEL_DIR)
-            mlflow.sklearn.log_model(gbm_model, "retrained_model")
-            mlflow.log_param("n_estimators", 120)
-            mlflow.log_param("learning_rate", 0.08)
+            if MLFLOW_TRACKING_URI.startswith("http"):
+                mlflow.sklearn.log_model(gbm_model, "retrained_model")
+                mlflow.log_param("n_estimators", 120)
+                mlflow.log_param("learning_rate", 0.08)
             logging.info("Model retraining completed and saved.")
         return {"status": "Model retrained successfully"}
     except Exception as e:
@@ -164,27 +169,29 @@ def run_pipeline(args):
             if not os.path.exists(train_path) or not os.path.exists(test_path):
                 logging.error("Training or test data file not found. Please upload via the frontend first.")
                 raise FileNotFoundError("Training or test data file not found.")
-            with mlflow.start_run(run_name="Data Preparation"):
+            with mlflow.start_run(run_name="Data Preparation") if MLFLOW_TRACKING_URI.startswith("http") else mlflow.start_run(run_name="Data Preparation", tracking_uri=MLFLOW_TRACKING_URI):
                 logging.info("Starting data preparation...")
                 X_train, X_test, y_train, y_test = prepare_data(train_path, test_path)
                 joblib.dump((X_train, X_test, y_train, y_test), PREPARED_DATA_PATH)
-                mlflow.log_param("train_file", train_path)
-                mlflow.log_param("test_file", test_path)
-                mlflow.log_artifact(PREPARED_DATA_PATH)
+                if MLFLOW_TRACKING_URI.startswith("http"):
+                    mlflow.log_param("train_file", train_path)
+                    mlflow.log_param("test_file", test_path)
+                    mlflow.log_artifact(PREPARED_DATA_PATH)
                 logging.info("Data preparation completed and saved.")
 
         if args.train:
             if not os.path.exists(PREPARED_DATA_PATH):
                 logging.error("Prepared data not found. Run --prepare_data first.")
                 raise FileNotFoundError("Prepared data not found.")
-            with mlflow.start_run(run_name="Model Training"):
+            with mlflow.start_run(run_name="Model Training") if MLFLOW_TRACKING_URI.startswith("http") else mlflow.start_run(run_name="Model Training", tracking_uri=MLFLOW_TRACKING_URI):
                 logging.info("Training the Gradient Boosting Model...")
                 X_train, X_test, y_train, y_test = joblib.load(PREPARED_DATA_PATH)
                 gbm_model = train_gbm(X_train, y_train)
                 save_model(gbm_model, MODEL_DIR)
-                mlflow.sklearn.log_model(gbm_model, "model")
-                mlflow.log_param("n_estimators", 120)
-                mlflow.log_param("learning_rate", 0.08)
+                if MLFLOW_TRACKING_URI.startswith("http"):
+                    mlflow.sklearn.log_model(gbm_model, "model")
+                    mlflow.log_param("n_estimators", 120)
+                    mlflow.log_param("learning_rate", 0.08)
                 logging.info("Model training completed and saved.")
 
         if args.evaluate:
@@ -194,32 +201,34 @@ def run_pipeline(args):
             if not os.path.exists(PREPARED_DATA_PATH):
                 logging.error("Prepared data not found. Run --prepare_data first.")
                 raise FileNotFoundError("Prepared data not found.")
-            with mlflow.start_run(run_name="Model Evaluation"):
+            with mlflow.start_run(run_name="Model Evaluation") if MLFLOW_TRACKING_URI.startswith("http") else mlflow.start_run(run_name="Model Evaluation", tracking_uri=MLFLOW_TRACKING_URI):
                 logging.info("Evaluating the model...")
                 model = load_model(MODEL_PATH)
                 X_train, X_test, y_train, y_test = joblib.load(PREPARED_DATA_PATH)
                 metrics = evaluate_model(model, X_test, y_test)
+                if MLFLOW_TRACKING_URI.startswith("http"):
+                    mlflow.log_metrics({"accuracy": metrics["accuracy"], "roc_auc": metrics["roc_auc"]})
+                    mlflow.log_artifact(MODEL_PATH)
                 print("\nModel Performance:")
                 print(f"Accuracy: {metrics['accuracy']:.4f}")
                 print(f"ROC AUC Score: {metrics['roc_auc']:.4f}")
                 print("\nClassification Report:\n")
                 print(metrics["classification_report"])
-                mlflow.log_metrics({"accuracy": metrics["accuracy"], "roc_auc": metrics["roc_auc"]})
-                mlflow.log_artifact(MODEL_PATH)
                 logging.info("Model evaluation completed.")
 
         if args.retrain:
             if not os.path.exists(PREPARED_DATA_PATH):
                 logging.error("Prepared data not found. Run --prepare_data first.")
                 raise FileNotFoundError("Prepared data not found.")
-            with mlflow.start_run(run_name="Model Retraining"):
+            with mlflow.start_run(run_name="Model Retraining") if MLFLOW_TRACKING_URI.startswith("http") else mlflow.start_run(run_name="Model Retraining", tracking_uri=MLFLOW_TRACKING_URI):
                 logging.info("Retraining the Gradient Boosting Model...")
                 X_train, X_test, y_train, y_test = joblib.load(PREPARED_DATA_PATH)
                 gbm_model = train_gbm(X_train, y_train)
                 save_model(gbm_model, MODEL_DIR)
-                mlflow.sklearn.log_model(gbm_model, "retrained_model")
-                mlflow.log_param("n_estimators", 120)
-                mlflow.log_param("learning_rate", 0.08)
+                if MLFLOW_TRACKING_URI.startswith("http"):
+                    mlflow.sklearn.log_model(gbm_model, "retrained_model")
+                    mlflow.log_param("n_estimators", 120)
+                    mlflow.log_param("learning_rate", 0.08)
                 logging.info("Model retraining completed and saved.")
 
     except Exception as e:
