@@ -16,7 +16,10 @@ if "logged_in" not in st.session_state:
 def display_response(response, success_msg="Operation successful!", error_msg="Operation failed!"):
     if response.status_code == 200:
         st.success(success_msg)
-        return response.json()
+        try:
+            return response.json()
+        except json.JSONDecodeError:
+            return {"status": success_msg}
     else:
         st.error(f"{error_msg} (Error {response.status_code}: {response.text})")
         return None
@@ -31,19 +34,27 @@ if page == "Prepare Data":
     if submit_button and train_file and test_file:
         files = {"train_file": train_file, "test_file": test_file}
         response = requests.post(f"{backend_url}/prepare_data", files=files)
-        display_response(response, "Data prepared successfully!", "Data preparation failed.")
+        result = display_response(response, "Data prepared successfully!", "Data preparation failed.")
+        if result:
+            st.session_state.data_prepared = True
 
 elif page == "Train Model":
     st.title("Train Model")
     st.markdown("Click below to train the Gradient Boosting Model.")
-    if st.button("Train"):
+    if not st.session_state.get("data_prepared", False):
+        st.warning("Please prepare data first by uploading and preparing datasets.")
+    if st.button("Train") and st.session_state.get("data_prepared", False):
         response = requests.post(f"{backend_url}/train")
-        display_response(response, "Model trained successfully!", "Training failed.")
+        result = display_response(response, "Model trained successfully!", "Training failed.")
+        if result:
+            st.session_state.model_trained = True
 
 elif page == "Evaluate Model":
     st.title("Model Evaluation")
     st.markdown("Evaluate the performance of the trained model.")
-    if st.button("Evaluate"):
+    if not st.session_state.get("model_trained", False):
+        st.warning("Please train the model first.")
+    if st.button("Evaluate") and st.session_state.get("model_trained", False):
         response = requests.get(f"{backend_url}/evaluate")
         if response.status_code == 200:
             metrics = response.json()
@@ -61,10 +72,12 @@ elif page == "Evaluate Model":
 elif page == "Predict":
     st.title("Make Predictions")
     st.markdown("Upload a CSV file to get predictions from the trained model.")
+    if not st.session_state.get("model_trained", False):
+        st.warning("Please train the model first.")
     with st.form(key="predict_form"):
         input_data = st.file_uploader("Upload Data for Prediction", type=["csv"])
         predict_button = st.form_submit_button(label="Predict")
-    if predict_button and input_data:
+    if predict_button and input_data and st.session_state.get("model_trained", False):
         response = requests.post(f"{backend_url}/predict", files={"file": input_data})
         if response.status_code == 200:
             predictions = response.json()["predictions"]
@@ -86,6 +99,8 @@ elif page == "Profile":
         if st.button("Logout"):
             st.session_state.logged_in = False
             st.session_state.username = None
+            st.session_state.data_prepared = False
+            st.session_state.model_trained = False
             st.success("Logged out successfully!")
             st.experimental_rerun()
     else:

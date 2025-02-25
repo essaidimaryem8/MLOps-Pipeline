@@ -4,6 +4,7 @@ import sys
 import pandas as pd
 import numpy as np
 
+# Adjust sys.path to include the backend directory relative to tests
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'backend')))
 
 try:
