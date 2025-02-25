@@ -6,3 +6,4 @@ pandas
 numpy
 mlflow
 imbalanced-learn
+python-multipart

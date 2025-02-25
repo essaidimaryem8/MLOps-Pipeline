@@ -18,8 +18,10 @@ app = FastAPI()
 # Use environment variable to determine if running in GitHub Actions
 if os.getenv("GITHUB_ACTIONS", "false") == "true":
     MLFLOW_TRACKING_URI = "file://./mlruns"  # Local file-based store for CI
+elif os.getenv("DOCKER", "false") == "true":
+    MLFLOW_TRACKING_URI = "http://mlflow:5000"  # Docker Compose network
 else:
-    MLFLOW_TRACKING_URI = "http://mlflow:5000"  # Docker Compose for local/testing
+    MLFLOW_TRACKING_URI = "http://localhost:5000"  # Local development in WSL 2
 
 DATA_DIR = "data"
 MODEL_DIR = "models"

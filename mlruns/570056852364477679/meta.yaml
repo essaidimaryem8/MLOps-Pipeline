@@ -1,0 +1,6 @@
+artifact_location: mlflow-artifacts:/570056852364477679
+creation_time: 1740517500103
+experiment_id: '570056852364477679'
+last_update_time: 1740517500103
+lifecycle_stage: active
+name: GBM_Experiment
