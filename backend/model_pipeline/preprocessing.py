@@ -7,6 +7,7 @@ import logging
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
+
 def preprocess_data(df, target_col="Churn", is_train=True):
     """Preprocess data including encoding, imputation, scaling, and balancing."""
     try:

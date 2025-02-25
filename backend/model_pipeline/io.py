@@ -4,6 +4,7 @@ import logging
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
+
 def save_model(model, save_dir="models"):
     """Save trained model to disk."""
     try:
@@ -15,6 +16,7 @@ def save_model(model, save_dir="models"):
     except Exception as e:
         logging.error(f"Error in saving model: {str(e)}")
         raise
+
 
 def load_model(model_path):
     """Load a saved GBM model from disk."""

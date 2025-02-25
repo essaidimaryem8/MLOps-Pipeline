@@ -12,6 +12,7 @@ try:
 except ModuleNotFoundError:
     pytest.exit("Error: model_pipeline.py not found or not importable.")
 
+
 @pytest.fixture
 def simple_training_data():
     X_train = pd.DataFrame({
@@ -20,6 +21,7 @@ def simple_training_data():
     })
     y_train = pd.Series([0, 1, 0, 1, 0])
     return X_train, y_train
+
 
 def test_train_model(simple_training_data):
     X_train, y_train = simple_training_data

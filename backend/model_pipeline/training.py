@@ -3,6 +3,7 @@ import logging
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
+
 def train_gbm(X_train, y_train):
     """Train the Gradient Boosting Model (GBM)."""
     try:

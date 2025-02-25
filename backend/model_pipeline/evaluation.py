@@ -3,6 +3,7 @@ import logging
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
+
 def evaluate_model(model, X_test, y_test):
     """Evaluate model performance."""
     try:
