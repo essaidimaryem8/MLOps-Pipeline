@@ -51,7 +51,7 @@ async def prepare_data_endpoint(train_file: UploadFile = File(...), test_file: U
             f.write(await train_file.read())
         with open(test_path_api, "wb") as f:
             f.write(await test_file.read())
-        
+
         with mlflow.start_run(run_name="Data Preparation") if MLFLOW_TRACKING_URI.startswith("http") else mlflow.start_run(run_name="Data Preparation", tracking_uri=MLFLOW_TRACKING_URI):
             logging.info("Starting data preparation...")
             X_train, X_test, y_train, y_test = prepare_data(train_path_api, test_path_api)
