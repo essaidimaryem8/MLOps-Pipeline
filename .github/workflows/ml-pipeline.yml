@@ -49,6 +49,7 @@ jobs:
             echo "data_available=true" >> $GITHUB_OUTPUT
           else
             echo "data_available=false" >> $GITHUB_OUTPUT
+          fi  # Added to close the if statement
 
       - name: Prepare Data
         if: steps.check-data.outputs.data_available == 'true'
