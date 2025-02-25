@@ -1,9 +1,9 @@
-version: "3"
-
 services:
   backend:
     image: essaidimaryem/ml-pipeline-backend:latest
     container_name: backend
+    environment:
+      - DOCKER=true
     ports:
       - "8000:8000"
     volumes:
@@ -11,7 +11,10 @@ services:
       - ./models:/app/models
     networks:
       - ml_network
-
+    depends_on:
+      mlflow:
+        condition: service_healthy
+  
   frontend:
     image: essaidimaryem/ml-pipeline-frontend:latest
     container_name: frontend
@@ -21,7 +24,7 @@ services:
       - "8501:8501"
     networks:
       - ml_network
-
+  
   mlflow:
     image: ghcr.io/mlflow/mlflow:latest
     container_name: mlflow
@@ -32,13 +35,20 @@ services:
       - ./mlruns:/mlruns
     networks:
       - ml_network
-
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+  
   elasticsearch:
     image: elasticsearch:8.12.2
     container_name: elasticsearch
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
     ports:
       - "9200:9200"
       - "9300:9300"
@@ -46,7 +56,7 @@ services:
       - ./elasticsearch_data:/usr/share/elasticsearch/data
     networks:
       - ml_network
-
+  
   kibana:
     image: kibana:8.12.2
     container_name: kibana
