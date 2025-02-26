@@ -12,6 +12,7 @@ services:
     volumes:
       - ./data:/app/data
       - ./models:/app/models
+      - ./mlruns:/mlruns
     networks:
       - ml_network
     depends_on:
