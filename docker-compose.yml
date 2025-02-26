@@ -4,6 +4,9 @@ services:
     container_name: backend
     environment:
       - DOCKER=true
+      - EMAIL_PASSWORD=epcu lndl gwiy wole
+      - SENDER_EMAIL=maryemessaidi8@gmail.com
+      - RECIPIENT_EMAIL=Maryem.Essaidi@esprit.tn
     ports:
       - "8000:8000"
     volumes:
