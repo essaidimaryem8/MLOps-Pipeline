@@ -87,7 +87,7 @@ async def prepare_data_endpoint(train_file: UploadFile = File(...), test_file: U
             mlflow.log_param("train_file", train_path_api)
             mlflow.log_param("test_file", test_path_api)
             mlflow.log_artifact(PREPARED_DATA_PATH)
-            mlflow.log_artifact("backend/main.py", "code_artifact")
+            mlflow.log_artifact(os.path.abspath("backend/main.py"), "code_artifact")
             mlflow.log_artifact("model_pipeline/preprocessing.py", "code_artifact")
             logging.info("Data preparation completed and saved.")
         send_email("Pipeline Step Completed: Prepare Data", f"Data preparation completed. Run ID: {mlflow.active_run().info.run_id}", os.getenv("RECIPIENT_EMAIL", "recipient@example.com"))
