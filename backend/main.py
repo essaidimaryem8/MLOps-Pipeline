@@ -41,9 +41,11 @@ os.makedirs(RAW_DATA_DIR, exist_ok=True)
 mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
 mlflow.set_experiment("GBM_Experiment")
 
+
 @app.get("/")
 def home():
     return {"message": "Backend API is running"}
+
 
 def send_email(subject, body, to_email):
     try:
@@ -66,6 +68,7 @@ def send_email(subject, body, to_email):
         logging.info(f"Email sent to {recipient_email} with subject: {subject}")
     except Exception as e:
         logging.error(f"Failed to send email: {str(e)}")
+
 
 @app.post("/prepare_data")
 async def prepare_data_endpoint(train_file: UploadFile = File(...), test_file: UploadFile = File(...)):
@@ -93,6 +96,7 @@ async def prepare_data_endpoint(train_file: UploadFile = File(...), test_file: U
         logging.error(f"Error in data preparation: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.post("/train")
 def train():
     try:
@@ -115,6 +119,7 @@ def train():
     except Exception as e:
         logging.error(f"Error in training: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/evaluate")
 def evaluate():
@@ -140,6 +145,7 @@ def evaluate():
         logging.error(f"Evaluation error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.post("/predict")
 def predict(file: UploadFile = File(...)):
     try:
@@ -159,6 +165,7 @@ def predict(file: UploadFile = File(...)):
     except Exception as e:
         logging.error(f"Prediction error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/retrain")  # New endpoint for excellence
 def retrain():
@@ -182,6 +189,7 @@ def retrain():
     except Exception as e:
         logging.error(f"Error in retraining: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/login")
 def login(data: dict):
@@ -271,6 +279,7 @@ def run_pipeline(args):
     except Exception as e:
         logging.error(f"Pipeline execution failed: {str(e)}")
         raise
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run parts of the ML pipeline or start FastAPI server.")
