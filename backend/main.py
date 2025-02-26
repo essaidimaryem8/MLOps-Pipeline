@@ -26,7 +26,7 @@ elif os.getenv("DOCKER", "false") == "true":
 else:
     MLFLOW_TRACKING_URI = "http://localhost:5000"  # Local development in WSL 2
 
-DATA_DIR = "../data"
+DATA_DIR = "data"  # Revert to project root relative path
 MODEL_DIR = "models"
 RAW_DATA_DIR = os.path.join(DATA_DIR, "raw_data")
 train_path = os.path.join(RAW_DATA_DIR, "churn-bigml-80.csv")
@@ -41,11 +41,9 @@ os.makedirs(RAW_DATA_DIR, exist_ok=True)
 mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
 mlflow.set_experiment("GBM_Experiment")
 
-
 @app.get("/")
 def home():
     return {"message": "Backend API is running"}
-
 
 def send_email(subject, body, to_email):
     try:
@@ -69,7 +67,6 @@ def send_email(subject, body, to_email):
     except Exception as e:
         logging.error(f"Failed to send email: {str(e)}")
 
-
 @app.post("/prepare_data")
 async def prepare_data_endpoint(train_file: UploadFile = File(...), test_file: UploadFile = File(...)):
     try:
@@ -87,7 +84,7 @@ async def prepare_data_endpoint(train_file: UploadFile = File(...), test_file: U
             mlflow.log_param("train_file", train_path_api)
             mlflow.log_param("test_file", test_path_api)
             mlflow.log_artifact(PREPARED_DATA_PATH)
-            mlflow.log_artifact(os.path.abspath("backend/main.py"), "code_artifact")
+            mlflow.log_artifact(__file__, "code_artifact")  # Use __file__ for the current file
             mlflow.log_artifact("model_pipeline/preprocessing.py", "code_artifact")
             logging.info("Data preparation completed and saved.")
         send_email("Pipeline Step Completed: Prepare Data", f"Data preparation completed. Run ID: {mlflow.active_run().info.run_id}", os.getenv("RECIPIENT_EMAIL", "recipient@example.com"))
@@ -95,7 +92,6 @@ async def prepare_data_endpoint(train_file: UploadFile = File(...), test_file: U
     except Exception as e:
         logging.error(f"Error in data preparation: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @app.post("/train")
 def train():
@@ -111,7 +107,7 @@ def train():
             mlflow.sklearn.log_model(gbm_model, "model")
             mlflow.log_param("n_estimators", 120)
             mlflow.log_param("learning_rate", 0.08)
-            mlflow.log_artifact(os.path.abspath("backend/main.py"), "code_artifact")
+            mlflow.log_artifact(__file__, "code_artifact")  # Use __file__ for the current file
             mlflow.log_artifact("model_pipeline/training.py", "code_artifact")
             logging.info("Model training completed and saved.")
         send_email("Pipeline Step Completed: Train Model", f"Model training completed. Run ID: {mlflow.active_run().info.run_id}", os.getenv("RECIPIENT_EMAIL", "recipient@example.com"))
@@ -119,7 +115,6 @@ def train():
     except Exception as e:
         logging.error(f"Error in training: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @app.get("/evaluate")
 def evaluate():
@@ -136,7 +131,7 @@ def evaluate():
             metrics = evaluate_model(model, X_test, y_test)
             mlflow.log_metrics({"accuracy": metrics["accuracy"], "roc_auc": metrics["roc_auc"]})
             mlflow.log_artifact(MODEL_PATH)
-            mlflow.log_artifact(os.path.abspath("backend/main.py"), "code_artifact")
+            mlflow.log_artifact(__file__, "code_artifact")  # Use __file__ for the current file
             mlflow.log_artifact("model_pipeline/evaluation.py", "code_artifact")
             logging.info("Model evaluation completed.")
         send_email("Pipeline Step Completed: Evaluate Model", f"Model evaluation completed. Metrics: {metrics}. Run ID: {mlflow.active_run().info.run_id}", os.getenv("RECIPIENT_EMAIL", "recipient@example.com"))
@@ -144,7 +139,6 @@ def evaluate():
     except Exception as e:
         logging.error(f"Evaluation error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @app.post("/predict")
 def predict(file: UploadFile = File(...)):
@@ -158,14 +152,13 @@ def predict(file: UploadFile = File(...)):
             X, _, _ = preprocess_data(df, is_train=False)
             predictions = model.predict(X)
             mlflow.log_param("prediction_file", file.filename)
-            mlflow.log_artifact(os.path.abspath("backend/main.py"), "code_artifact")
+            mlflow.log_artifact(__file__, "code_artifact")  # Use __file__ for the current file
             mlflow.log_artifact("model_pipeline/prediction.py", "code_artifact")
         send_email("Pipeline Step Completed: Predict", f"Predictions completed. Run ID: {mlflow.active_run().info.run_id}", os.getenv("RECIPIENT_EMAIL", "recipient@example.com"))
         return {"predictions": predictions.tolist()}
     except Exception as e:
         logging.error(f"Prediction error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @app.post("/retrain")  # New endpoint for excellence
 def retrain():
@@ -181,7 +174,7 @@ def retrain():
             mlflow.sklearn.log_model(gbm_model, "retrained_model")
             mlflow.log_param("n_estimators", 120)
             mlflow.log_param("learning_rate", 0.08)
-            mlflow.log_artifact(os.path.abspath("backend/main.py"), "code_artifact")
+            mlflow.log_artifact(__file__, "code_artifact")  # Use __file__ for the current file
             mlflow.log_artifact("model_pipeline/training.py", "code_artifact")
             logging.info("Model retraining completed and saved.")
         send_email("Pipeline Step Completed: Retrain Model", f"Model retraining completed. Run ID: {mlflow.active_run().info.run_id}", os.getenv("RECIPIENT_EMAIL", "recipient@example.com"))
@@ -189,7 +182,6 @@ def retrain():
     except Exception as e:
         logging.error(f"Error in retraining: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @app.post("/login")
 def login(data: dict):
@@ -199,7 +191,6 @@ def login(data: dict):
         return {"status": "success", "message": "Login successful"}
     else:
         raise HTTPException(status_code=401, detail="Invalid credentials")
-
 
 def run_pipeline(args):
     try:
@@ -214,7 +205,7 @@ def run_pipeline(args):
                 mlflow.log_param("train_file", train_path)
                 mlflow.log_param("test_file", test_path)
                 mlflow.log_artifact(PREPARED_DATA_PATH)
-                mlflow.log_artifact(os.path.abspath("backend/main.py"), "code_artifact")
+                mlflow.log_artifact(__file__, "code_artifact")  # Use __file__ for the current file
                 mlflow.log_artifact("model_pipeline/preprocessing.py", "code_artifact")
                 logging.info("Data preparation completed and saved.")
             send_email("Pipeline Step Completed: Prepare Data", f"Data preparation completed. Run ID: {mlflow.active_run().info.run_id}", os.getenv("RECIPIENT_EMAIL", "recipient@example.com"))
@@ -231,7 +222,7 @@ def run_pipeline(args):
                 mlflow.sklearn.log_model(gbm_model, "model")
                 mlflow.log_param("n_estimators", 120)
                 mlflow.log_param("learning_rate", 0.08)
-                mlflow.log_artifact(os.path.abspath("backend/main.py"), "code_artifact")
+                mlflow.log_artifact(__file__, "code_artifact")  # Use __file__ for the current file
                 mlflow.log_artifact("model_pipeline/training.py", "code_artifact")
                 logging.info("Model training completed and saved.")
             send_email("Pipeline Step Completed: Train Model", f"Model training completed. Run ID: {mlflow.active_run().info.run_id}", os.getenv("RECIPIENT_EMAIL", "recipient@example.com"))
@@ -250,7 +241,7 @@ def run_pipeline(args):
                 metrics = evaluate_model(model, X_test, y_test)
                 mlflow.log_metrics({"accuracy": metrics["accuracy"], "roc_auc": metrics["roc_auc"]})
                 mlflow.log_artifact(MODEL_PATH)
-                mlflow.log_artifact(os.path.abspath("backend/main.py"), "code_artifact")
+                mlflow.log_artifact(__file__, "code_artifact")  # Use __file__ for the current file
                 mlflow.log_artifact("model_pipeline/evaluation.py", "code_artifact")
                 print("\nModel Performance:")
                 print(f"Accuracy: {metrics['accuracy']:.4f}")
@@ -272,7 +263,7 @@ def run_pipeline(args):
                 mlflow.sklearn.log_model(gbm_model, "retrained_model")
                 mlflow.log_param("n_estimators", 120)
                 mlflow.log_param("learning_rate", 0.08)
-                mlflow.log_artifact(os.path.abspath("backend/main.py"), "code_artifact")
+                mlflow.log_artifact(__file__, "code_artifact")  # Use __file__ for the current file
                 mlflow.log_artifact("model_pipeline/training.py", "code_artifact")
                 logging.info("Model retraining completed and saved.")
             send_email("Pipeline Step Completed: Retrain Model", f"Model retraining completed. Run ID: {mlflow.active_run().info.run_id}", os.getenv("RECIPIENT_EMAIL", "recipient@example.com"))
@@ -280,7 +271,6 @@ def run_pipeline(args):
     except Exception as e:
         logging.error(f"Pipeline execution failed: {str(e)}")
         raise
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run parts of the ML pipeline or start FastAPI server.")
