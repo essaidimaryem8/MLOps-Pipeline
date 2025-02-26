@@ -200,6 +200,7 @@ def login(data: dict):
     else:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
+
 def run_pipeline(args):
     try:
         if args.prepare_data or not any([args.prepare_data, args.train, args.evaluate, args.retrain]):
