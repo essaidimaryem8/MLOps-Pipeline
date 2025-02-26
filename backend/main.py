@@ -26,7 +26,7 @@ elif os.getenv("DOCKER", "false") == "true":
 else:
     MLFLOW_TRACKING_URI = "http://localhost:5000"  # Local development in WSL 2
 
-DATA_DIR = "data"  # Revert to project root relative path
+DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data")
 MODEL_DIR = "models"
 RAW_DATA_DIR = os.path.join(DATA_DIR, "raw_data")
 train_path = os.path.join(RAW_DATA_DIR, "churn-bigml-80.csv")
