@@ -69,7 +69,7 @@ jobs:
           EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
           SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
           RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
-          MLFLOW_TRACKING_URI: file://../../mlruns
+          MLFLOW_TRACKING_URI: file://./mlruns
         run: |
           python main.py --prepare_data
           mlflow experiments list --experiment-name GBM_Experiment  # Verify tracking
@@ -82,7 +82,7 @@ jobs:
           EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
           SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
           RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
-          MLFLOW_TRACKING_URI: file://../../mlruns
+          MLFLOW_TRACKING_URI: file://./mlruns
         run: |
           python main.py --train
           mlflow experiments list --experiment-name GBM_Experiment
@@ -95,7 +95,7 @@ jobs:
           EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
           SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
           RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
-          MLFLOW_TRACKING_URI: file://../../mlruns
+          MLFLOW_TRACKING_URI: file://./mlruns
         run: |
           python main.py --evaluate
           mlflow experiments list --experiment-name GBM_Experiment
@@ -108,7 +108,7 @@ jobs:
           EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
           SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
           RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
-          MLFLOW_TRACKING_URI: file://../../mlruns
+          MLFLOW_TRACKING_URI: file://./mlruns
         run: |
           python main.py --retrain
           mlflow experiments list --experiment-name GBM_Experiment
