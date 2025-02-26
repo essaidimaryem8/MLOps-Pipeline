@@ -52,8 +52,8 @@ def send_email(subject, body, to_email):
         # Email configuration (replace with your SMTP settings)
         smtp_server = "smtp.gmail.com"  # Example: Gmail SMTP
         smtp_port = 587  # TLS port for Gmail
-        sender_email = "your_email@gmail.com"  # Replace with your email
-        sender_password = os.getenv("EMAIL_PASSWORD", "your_app_password")  # Use app password for Gmail, store in environment
+        sender_email = "maryemessaidi8@gmail.com"  # Replace with your email
+        sender_password = os.getenv("EMAIL_PASSWORD", "epcu lndl gwiy wole")  # Use app password for Gmail, store in environment
         recipient_email = to_email  # Replace with recipient email
 
         msg = MIMEText(body)
