@@ -51,15 +51,11 @@ jobs:
             echo "data_available=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Install MLflow for Tracking
+      - name: Start MLflow Tracking Server
+        working-directory: backend
         run: |
-          pip install mlflow
-
-      - name: Set up MLflow Tracking
-        run: |
-          mkdir -p mlruns
-          chmod -R 755 mlruns
-          echo "MLFLOW_TRACKING_URI=file://$(pwd)/mlruns" >> $GITHUB_ENV
+          mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow.db --default-artifact-root ./mlruns &  # Run in background
+          sleep 5  # Wait for server to start
 
       - name: Prepare Data
         if: steps.check-data.outputs.data_available == 'true'
@@ -69,7 +65,7 @@ jobs:
           EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
           SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
           RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
-          MLFLOW_TRACKING_URI: file://./mlruns
+          MLFLOW_TRACKING_URI: http://localhost:5000
         run: |
           python main.py --prepare_data
           mlflow experiments list --experiment-name GBM_Experiment  # Verify tracking
@@ -82,7 +78,7 @@ jobs:
           EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
           SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
           RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
-          MLFLOW_TRACKING_URI: file://./mlruns
+          MLFLOW_TRACKING_URI: http://localhost:5000
         run: |
           python main.py --train
           mlflow experiments list --experiment-name GBM_Experiment
@@ -95,7 +91,7 @@ jobs:
           EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
           SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
           RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
-          MLFLOW_TRACKING_URI: file://./mlruns
+          MLFLOW_TRACKING_URI: http://localhost:5000
         run: |
           python main.py --evaluate
           mlflow experiments list --experiment-name GBM_Experiment
@@ -108,7 +104,7 @@ jobs:
           EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
           SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
           RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
-          MLFLOW_TRACKING_URI: file://./mlruns
+          MLFLOW_TRACKING_URI: http://localhost:5000
         run: |
           python main.py --retrain
           mlflow experiments list --experiment-name GBM_Experiment

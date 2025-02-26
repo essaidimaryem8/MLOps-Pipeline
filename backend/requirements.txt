@@ -9,3 +9,4 @@ imbalanced-learn
 python-multipart
 email-validator
 pycodestyle
+pytest
