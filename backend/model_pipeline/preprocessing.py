@@ -30,7 +30,7 @@ def preprocess_data(train_path, test_path=None, target_col="Churn", is_train=Tru
             df = pd.read_csv(train_path)
         else:
             raise ValueError("Input must be a DataFrame or a file path")
-        
+
         X, y, _ = _process_data(df, target_col, is_train=False)
         return X, y, None
     except Exception as e:
@@ -41,7 +41,7 @@ def preprocess_data(train_path, test_path=None, target_col="Churn", is_train=Tru
 def _process_data(df, target_col="Churn", is_train=True, label_encoders=None, scaler=None):
     """Internal function to process a single dataframe."""
     X, y = df.drop(columns=[target_col]), df[target_col]
-    
+
     if is_train:
         label_encoders = {}
         for col in X.select_dtypes(include=["object"]).columns:
@@ -52,21 +52,21 @@ def _process_data(df, target_col="Churn", is_train=True, label_encoders=None, sc
         for col in X.select_dtypes(include=["object"]).columns:
             if col in label_encoders:
                 X[col] = label_encoders[col].transform(X[col])
-    
+
     imputer = KNNImputer(n_neighbors=5)
     X = pd.DataFrame(imputer.fit_transform(X) if is_train else imputer.transform(X), columns=X.columns)
-    
+
     if is_train:
         scaler = StandardScaler()
         X = pd.DataFrame(scaler.fit_transform(X), columns=X.columns)
     else:
         X = pd.DataFrame(scaler.transform(X), columns=X.columns)
-    
+
     if is_train:
         nearmiss = NearMiss(version=3)
         X_balanced, y_balanced = nearmiss.fit_resample(X, y)
         logging.info("Data preprocessing completed successfully with balancing")
         return X_balanced, y_balanced, (X, y, label_encoders, scaler)
-    
+
     logging.info("Data preprocessing completed successfully")
     return X, y, None
