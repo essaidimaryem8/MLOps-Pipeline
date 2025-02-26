@@ -4,7 +4,7 @@ import os
 import smtplib
 from email.mime.text import MIMEText
 from fastapi import FastAPI, File, UploadFile, HTTPException
-from model_pipeline.preprocessing import prepare_data
+from model_pipeline.preprocessing import preprocess_data  # Updated from prepare_data
 from model_pipeline.training import train_gbm
 from model_pipeline.evaluation import evaluate_model
 from model_pipeline.io import save_model, load_model
@@ -41,11 +41,9 @@ os.makedirs(RAW_DATA_DIR, exist_ok=True)
 mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
 mlflow.set_experiment("GBM_Experiment")
 
-
 @app.get("/")
 def home():
     return {"message": "Backend API is running"}
-
 
 def send_email(subject, body, to_email):
     try:
@@ -69,7 +67,6 @@ def send_email(subject, body, to_email):
     except Exception as e:
         logging.error(f"Failed to send email: {str(e)}")
 
-
 @app.post("/prepare_data")
 async def prepare_data_endpoint(train_file: UploadFile = File(...), test_file: UploadFile = File(...)):
     try:
@@ -82,7 +79,8 @@ async def prepare_data_endpoint(train_file: UploadFile = File(...), test_file: U
 
         with mlflow.start_run(run_name="Data Preparation") if MLFLOW_TRACKING_URI.startswith("http") else mlflow.start_run(run_name="Data Preparation", tracking_uri=MLFLOW_TRACKING_URI):
             logging.info("Starting data preparation...")
-            X_train, X_test, y_train, y_test = prepare_data(train_path_api, test_path_api)
+            # Updated to call preprocess_data instead of prepare_data
+            X_train, X_test, y_train, y_test = preprocess_data(train_path_api, test_path_api)
             joblib.dump((X_train, X_test, y_train, y_test), PREPARED_DATA_PATH)
             if MLFLOW_TRACKING_URI.startswith("http"):
                 mlflow.log_param("train_file", train_path_api)
@@ -96,7 +94,6 @@ async def prepare_data_endpoint(train_file: UploadFile = File(...), test_file: U
     except Exception as e:
         logging.error(f"Error in data preparation: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @app.post("/train")
 def train():
@@ -116,12 +113,11 @@ def train():
                 mlflow.log_artifact("backend/main.py", "code_artifact")
                 mlflow.log_artifact("model_pipeline/training.py", "code_artifact")
             logging.info("Model training completed and saved.")
-        send_email("Pipeline Step Completed: Train Model", f"Model training completed. Run ID: {mlflow.active_run().info.run_id if MLFLOW_TRACKING_URI.startswith('http') else mlflow.active_run().info.run_id}", "recipient@example.com")
+        send_email("Pipeline Step Completed: Train Model", f"Model training completed. Run ID: {mlflow.active_run().info.run_id if MLFLOW_TRACKING_URI.startswith('http') else mlflow.active_run().info.run_id}", os.getenv("RECIPIENT_EMAIL", "recipient@example.com"))
         return {"status": "Model trained successfully"}
     except Exception as e:
         logging.error(f"Error in training: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @app.get("/evaluate")
 def evaluate():
@@ -148,7 +144,6 @@ def evaluate():
         logging.error(f"Evaluation error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-
 @app.post("/predict")
 def predict(file: UploadFile = File(...)):
     try:
@@ -158,7 +153,8 @@ def predict(file: UploadFile = File(...)):
         with mlflow.start_run(run_name="Prediction") if MLFLOW_TRACKING_URI.startswith("http") else mlflow.start_run(run_name="Prediction", tracking_uri=MLFLOW_TRACKING_URI):
             model = load_model(MODEL_PATH)
             df = pd.read_csv(file.file)
-            X, _, _ = prepare_data(df, is_train=False)
+            # Updated to call preprocess_data instead of prepare_data
+            X, _, _ = preprocess_data(df, is_train=False)
             predictions = model.predict(X)
             if MLFLOW_TRACKING_URI.startswith("http"):
                 mlflow.log_param("prediction_file", file.filename)
@@ -169,7 +165,6 @@ def predict(file: UploadFile = File(...)):
     except Exception as e:
         logging.error(f"Prediction error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @app.post("/retrain")  # New endpoint for excellence
 def retrain():
@@ -195,7 +190,6 @@ def retrain():
         logging.error(f"Error in retraining: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-
 @app.post("/login")
 def login(data: dict):
     username = data.get("username")
@@ -205,7 +199,6 @@ def login(data: dict):
     else:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-
 def run_pipeline(args):
     try:
         if args.prepare_data or not any([args.prepare_data, args.train, args.evaluate, args.retrain]):
@@ -214,7 +207,8 @@ def run_pipeline(args):
                 raise FileNotFoundError("Training or test data file not found.")
             with mlflow.start_run(run_name="Data Preparation") if MLFLOW_TRACKING_URI.startswith("http") else mlflow.start_run(run_name="Data Preparation", tracking_uri=MLFLOW_TRACKING_URI):
                 logging.info("Starting data preparation...")
-                X_train, X_test, y_train, y_test = prepare_data(train_path, test_path)
+                # Updated to call preprocess_data instead of prepare_data
+                X_train, X_test, y_train, y_test = preprocess_data(train_path, test_path)
                 joblib.dump((X_train, X_test, y_train, y_test), PREPARED_DATA_PATH)
                 if MLFLOW_TRACKING_URI.startswith("http"):
                     mlflow.log_param("train_file", train_path)
@@ -289,7 +283,6 @@ def run_pipeline(args):
     except Exception as e:
         logging.error(f"Pipeline execution failed: {str(e)}")
         raise
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run parts of the ML pipeline or start FastAPI server.")
