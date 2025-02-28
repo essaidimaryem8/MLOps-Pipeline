@@ -10,34 +10,45 @@ pipeline {
         stage('Checkout') {
             steps {
                 git branch: 'main',
-                    credentialsId: 'ML_Pipeline',  // Specify the credential ID
+                    credentialsId: 'ML_Pipeline',
                     url: 'https://github.com/essaidimaryem8/ML-Pipeline.git'
             }
         }
         stage('Set Up Python') {
             steps {
                 sh 'python3 -m venv venv'
-                sh '. venv/bin/activate'
-                sh 'pip install --upgrade pip'
-                sh 'pip install -r backend/requirements.txt -r frontend/requirements.txt'
+                sh '''
+                    . venv/bin/activate
+                    python3 -m pip install --upgrade pip
+                    python3 -m pip install -r backend/requirements.txt -r frontend/requirements.txt
+                '''
             }
         }
         stage('Code Quality') {
             steps {
-                sh 'pycodestyle backend/main.py backend/model_pipeline/preprocessing.py backend/model_pipeline/training.py backend/model_pipeline/evaluation.py backend/model_pipeline/io.py tests/test_main.py --max-line-length=120 --ignore=E203,E266,E501,W503'
+                sh '''
+                    . venv/bin/activate
+                    pycodestyle backend/main.py backend/model_pipeline/preprocessing.py backend/model_pipeline/training.py backend/model_pipeline/evaluation.py backend/model_pipeline/io.py tests/test_main.py --max-line-length=120 --ignore=E203,E266,E501,W503
+                '''
             }
         }
         stage('Run Tests') {
             steps {
                 dir('backend') {
-                    sh 'pytest tests/test_main.py -v'
+                    sh '''
+                        . ../venv/bin/activate
+                        pytest tests/test_main.py -v
+                    '''
                 }
             }
         }
         stage('Start MLflow Server') {
             steps {
                 dir('backend') {
-                    sh 'nohup mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow.db --default-artifact-root ./mlruns &'
+                    sh '''
+                        . ../venv/bin/activate
+                        nohup mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow.db --default-artifact-root ./mlruns &
+                    '''
                     // Wait for server to start
                     sh 'sleep 15'
                 }
@@ -82,25 +93,40 @@ pipeline {
     }
     post {
         always {
-            sh 'docker-compose down'
+            // Change directory to where docker-compose.yml is located
+            dir('/var/lib/jenkins/workspace/ML-Pipeline') {
+                sh 'docker-compose down || true'  // Ignore errors if docker-compose.yml is not found
+            }
             sh 'docker system prune -f'
         }
         success {
             echo 'Pipeline completed successfully!'
-            withCredentials([string(credentialsId: 'sender-email', variable: 'SENDER_EMAIL'),
-                             string(credentialsId: 'recipient-email', variable: 'RECIPIENT_EMAIL')]) {
-                mail to: "${RECIPIENT_EMAIL}",
-                     subject: "Pipeline Success: ML Pipeline",
-                     body: "The ML Pipeline job completed successfully on ${env.BUILD_URL}. Docker images are pushed to ${DOCKER_HUB_USERNAME}/ml-pipeline-backend:latest and ${DOCKER_HUB_USERNAME}/ml-pipeline-frontend:latest."
+            script {
+                try {
+                    withCredentials([string(credentialsId: 'sender-email', variable: 'SENDER_EMAIL'),
+                                     string(credentialsId: 'recipient-email', variable: 'RECIPIENT_EMAIL')]) {
+                        mail to: "${RECIPIENT_EMAIL}",
+                             subject: "Pipeline Success: ML Pipeline",
+                             body: "The ML Pipeline job completed successfully on ${env.BUILD_URL}. Docker images are pushed to ${DOCKER_HUB_USERNAME}/ml-pipeline-backend:latest and ${DOCKER_HUB_USERNAME}/ml-pipeline-frontend:latest."
+                    }
+                } catch (Exception e) {
+                    echo "Failed to send success email: ${e.getMessage()}"
+                }
             }
         }
         failure {
             echo 'Pipeline failed!'
-            withCredentials([string(credentialsId: 'sender-email', variable: 'SENDER_EMAIL'),
-                             string(credentialsId: 'recipient-email', variable: 'RECIPIENT_EMAIL')]) {
-                mail to: "${RECIPIENT_EMAIL}",
-                     subject: "Pipeline Failure: ML Pipeline",
-                     body: "The ML Pipeline job failed on ${env.BUILD_URL}. Check logs for details."
+            script {
+                try {
+                    withCredentials([string(credentialsId: 'sender-email', variable: 'SENDER_EMAIL'),
+                                     string(credentialsId: 'recipient-email', variable: 'RECIPIENT_EMAIL')]) {
+                        mail to: "${RECIPIENT_EMAIL}",
+                             subject: "Pipeline Failure: ML Pipeline",
+                             body: "The ML Pipeline job failed on ${env.BUILD_URL}. Check logs for details."
+                    }
+                } catch (Exception e) {
+                    echo "Failed to send failure email: ${e.getMessage()}"
+                }
             }
         }
     }
