@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import MagicMock, patch
 from fastapi.testclient import TestClient
-from backend.main import app, PREPARED_DATA_PATH, MODEL_PATH
+from backend.main import app, PREPARED_DATA_PATH, MODEL_PATH, TEST_PATH
 from model_pipeline.preprocessing import preprocess_data
 from model_pipeline.training import train_gbm
 from model_pipeline.evaluation import evaluate_model
@@ -19,7 +19,7 @@ train_data = [
 
 test_data = [
     {"Total day minutes": 80, "International plan": 0, "Customer service calls": 0,
-     "Total intl minutes": 4, "Voice mail plan": 0, "Number vmail messages": 0}
+     "Total intl minutes": 4, "Voice mail plan": 0, "Number vmail messages": 0, "Churn": False}
 ]
 
 predict_data = [
@@ -65,7 +65,6 @@ def test_prepare_data():
     assert response.status_code == 200
     assert response.json()["status"] == "Data prepared successfully"
 
-
 # Test /train endpoint
 def test_train():
     # Prepare data first
@@ -92,8 +91,11 @@ def test_evaluate():
     train_df = to_dataframe(train_data)
     test_df = to_dataframe(test_data)
 
-    with patch("pandas.read_csv", side_effect=[train_df, test_df, train_df, test_df]), \
-         patch("model_pipeline.preprocessing.preprocess_data", return_value=(train_df, test_df)), \
+    # Ensure preprocess_data returns consistent sample sizes for X_test and y_test
+    eval_test_df = to_dataframe(test_data)  # Same as test_df, used for evaluation
+
+    with patch("pandas.read_csv", side_effect=[train_df, test_df, test_df]), \
+         patch("model_pipeline.preprocessing.preprocess_data", side_effect=[(train_df, test_df), (None, eval_test_df)]), \
          patch("model_pipeline.training.train_gbm", return_value=mock_model) as mock_train, \
          patch("model_pipeline.io.save_model"), \
          patch("model_pipeline.io.load_model", return_value=mock_model), \
