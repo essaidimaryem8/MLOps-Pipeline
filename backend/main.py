@@ -18,13 +18,15 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 
 app = FastAPI()
 
-# Use environment variable to determine MLflow tracking URI for Jenkins, Docker, or local
-if os.getenv("JENKINS", "false") == "true":
-    MLFLOW_TRACKING_URI = "http://localhost:5000"  # MLflow server in Jenkins CI
-elif os.getenv("DOCKER", "false") == "true":
-    MLFLOW_TRACKING_URI = "http://mlflow:5000"  # Docker Compose network
-else:
-    MLFLOW_TRACKING_URI = "http://localhost:5000"  # Local development in WSL 2
+# Use MLFLOW_TRACKING_URI environment variable if set, otherwise determine based on environment
+MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI")
+if not MLFLOW_TRACKING_URI:
+    if os.getenv("JENKINS", "false") == "true":
+        MLFLOW_TRACKING_URI = "http://localhost:5000"  # MLflow server in Jenkins CI
+    elif os.getenv("DOCKER", "false") == "true":
+        MLFLOW_TRACKING_URI = "http://mlflow:5000"  # Docker Compose network
+    else:
+        MLFLOW_TRACKING_URI = "http://localhost:5000"  # Local development in WSL 2
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data")
 MODEL_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models")
