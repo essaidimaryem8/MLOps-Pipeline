@@ -20,7 +20,7 @@ def mock_mlflow():
         yield mock_start_run
 
 
-# Static mock data for testing (small lists of dictionaries with only the selected features)
+# Static mock data for testing (small lists of dictionaries with correct column names)
 train_data = [
     {"Total day minutes": 100, "International plan": "No", "Customer service calls": 1,
      "Total intl minutes": 5, "Voice mail plan": "No", "Number vmail messages": 0, "Churn": False},
@@ -50,8 +50,9 @@ def test_prepare_data():
     train_df = to_dataframe(train_data)
     test_df = to_dataframe(test_data)
 
-    # Mock the file upload by bypassing the actual file system
-    with patch("model_pipeline.preprocessing.preprocess_data", return_value=(train_df, test_df)) as mock_preprocess:
+    # Mock pd.read_csv to return the correct DataFrames
+    with patch("pandas.read_csv", side_effect=[train_df, test_df]), \
+         patch("model_pipeline.preprocessing.preprocess_data", return_value=(train_df, test_df)) as mock_preprocess:
         response = client.post("/prepare_data", files={
             "train_file": ("churn-bigml-80.csv", b"mock_train_data", "text/csv"),
             "test_file": ("churn-bigml-20.csv", b"mock_test_data", "text/csv")
@@ -66,7 +67,8 @@ def test_train():
     train_df = to_dataframe(train_data)
     test_df = to_dataframe(test_data)
 
-    with patch("model_pipeline.preprocessing.preprocess_data", return_value=(train_df, test_df)), \
+    with patch("pandas.read_csv", side_effect=[train_df, test_df]), \
+         patch("model_pipeline.preprocessing.preprocess_data", return_value=(train_df, test_df)), \
          patch("model_pipeline.training.train_gbm", return_value=MagicMock()) as mock_train, \
          patch("model_pipeline.io.save_model") as mock_save:
         client.post("/prepare_data", files={
@@ -83,7 +85,8 @@ def test_evaluate():
     train_df = to_dataframe(train_data)
     test_df = to_dataframe(test_data)
 
-    with patch("model_pipeline.preprocessing.preprocess_data", return_value=(train_df, test_df)), \
+    with patch("pandas.read_csv", side_effect=[train_df, test_df, train_df, test_df]), \
+         patch("model_pipeline.preprocessing.preprocess_data", return_value=(train_df, test_df)), \
          patch("model_pipeline.training.train_gbm", return_value=MagicMock()) as mock_train, \
          patch("model_pipeline.io.save_model"), \
          patch("model_pipeline.io.load_model", return_value=MagicMock()), \
@@ -105,11 +108,11 @@ def test_predict():
     test_df = to_dataframe(test_data)
     predict_df = to_dataframe(predict_data)
 
-    with patch("model_pipeline.preprocessing.preprocess_data", return_value=(train_df, test_df)), \
+    with patch("pandas.read_csv", side_effect=[train_df, test_df, predict_df]), \
+         patch("model_pipeline.preprocessing.preprocess_data", side_effect=[(train_df, test_df), predict_df]), \
          patch("model_pipeline.training.train_gbm", return_value=MagicMock()) as mock_train, \
          patch("model_pipeline.io.save_model"), \
          patch("model_pipeline.io.load_model", return_value=MagicMock()) as mock_load, \
-         patch("model_pipeline.preprocessing.preprocess_data", return_value=predict_df) as mock_preprocess, \
          patch("pandas.DataFrame.to_dict", return_value=[{"Churn": True}]) as mock_to_dict:
         client.post("/prepare_data", files={
             "train_file": ("churn-bigml-80.csv", b"mock_train_data", "text/csv"),
@@ -123,13 +126,13 @@ def test_predict():
     assert "predictions" in response.json()
     assert response.json()["predictions"] == [{"Churn": True}]
 
-
 # Test /retrain endpoint
 def test_retrain():
     train_df = to_dataframe(train_data)
     test_df = to_dataframe(test_data)
 
-    with patch("model_pipeline.preprocessing.preprocess_data", return_value=(train_df, test_df)), \
+    with patch("pandas.read_csv", side_effect=[train_df, test_df]), \
+         patch("model_pipeline.preprocessing.preprocess_data", return_value=(train_df, test_df)), \
          patch("model_pipeline.training.train_gbm", return_value=MagicMock()) as mock_train, \
          patch("model_pipeline.io.save_model"):
         client.post("/prepare_data", files={
@@ -140,7 +143,6 @@ def test_retrain():
         response = client.post("/retrain")
     assert response.status_code == 200
     assert response.json()["status"] == "Model retrained successfully"
-
 
 # Test /login endpoint
 def test_login():
