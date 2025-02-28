@@ -226,6 +226,7 @@ def evaluate():
         logging.error(f"Evaluation error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Evaluation error: {str(e)}")
 
+
 @app.post("/predict")
 def predict(file: UploadFile = File(...)):
     """

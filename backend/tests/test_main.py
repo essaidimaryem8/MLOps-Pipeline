@@ -35,6 +35,7 @@ predict_data = [
 def to_dataframe(data):
     return pd.DataFrame(data)
 
+
 # Create a mock model with a predict method
 mock_model = MagicMock()
 mock_model.predict.return_value = [True]  # Simulate prediction output
