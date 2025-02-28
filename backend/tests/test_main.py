@@ -117,6 +117,7 @@ def test_evaluate():
     assert "accuracy" in response.json()
     assert 0 <= response.json()["accuracy"] <= 1
 
+
 # Test /predict endpoint
 def test_predict():
     train_df = to_dataframe(train_data)
