@@ -38,7 +38,6 @@ def to_dataframe(data):
 
 # Create a mock model with a predict method
 mock_model = MagicMock()
-mock_model.predict.return_value = [True]  # Simulate prediction output
 
 
 # Helper function to determine what joblib.load should return based on the path
@@ -98,6 +97,9 @@ def test_evaluate():
     # Ensure preprocess_data returns consistent sample sizes for X_test and y_test
     eval_test_df = to_dataframe(test_data)  # Same as test_df, used for evaluation
 
+    # Set mock_model.predict to return predictions matching the number of samples in X_test
+    mock_model.predict.return_value = [True, False]  # Matches the 2 samples in test_df
+
     with patch("pandas.read_csv", side_effect=[train_df, test_df, test_df]), \
          patch("model_pipeline.preprocessing.preprocess_data", side_effect=[(train_df, test_df), (None, eval_test_df)]), \
          patch("model_pipeline.training.train_gbm", return_value=mock_model) as mock_train, \
@@ -122,6 +124,9 @@ def test_predict():
     train_df = to_dataframe(train_data)
     test_df = to_dataframe(test_data)
     predict_df = to_dataframe(predict_data)
+
+    # Update predict return value to match predict_data size (1 sample)
+    mock_model.predict.return_value = [True]
 
     with patch("pandas.read_csv", side_effect=[train_df, test_df, predict_df]), \
          patch("model_pipeline.preprocessing.preprocess_data", side_effect=[(train_df, test_df), predict_df]), \
