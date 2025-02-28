@@ -38,6 +38,7 @@ def to_dataframe(data):
 
 # Create a mock model with a predict method
 mock_model = MagicMock()
+mock_model.predict.return_value = [True]  # Default return value for other tests
 
 
 # Helper function to determine what joblib.load should return based on the path
@@ -105,7 +106,6 @@ def test_evaluate():
          patch("model_pipeline.training.train_gbm", return_value=mock_model) as mock_train, \
          patch("model_pipeline.io.save_model"), \
          patch("model_pipeline.io.load_model", return_value=mock_model), \
-         patch("model_pipeline.evaluation.evaluate_model", return_value={"accuracy": 0.95}) as mock_evaluate, \
          patch("joblib.dump"), \
          patch("joblib.load", side_effect=joblib_load_side_effect):
         client.post("/prepare_data", files={
