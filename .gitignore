@@ -1,0 +1,6 @@
+mlruns/
+elasticsearch_data/
+venv/
+*.pyc
+__pycache__/
+.env

@@ -1,12 +1,10 @@
-fastapi
-uvicorn
-joblib
-scikit-learn
+mlflow==2.13.0
 pandas
-numpy
-mlflow
 imbalanced-learn
-python-multipart
+scikit-learn
 email-validator
 pycodestyle
 pytest
+fastapi
+uvicorn
+requests

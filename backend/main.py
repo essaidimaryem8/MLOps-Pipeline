@@ -18,16 +18,16 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 
 app = FastAPI()
 
-# Use environment variable to determine MLflow tracking URI
-if os.getenv("GITHUB_ACTIONS", "false") == "true":
-    MLFLOW_TRACKING_URI = "http://localhost:5000"  # Use localhost in CI, assuming MLflow server runs locally in container
+# Use environment variable to determine MLflow tracking URI for Jenkins, Docker, or local
+if os.getenv("JENKINS", "false") == "true":
+    MLFLOW_TRACKING_URI = "http://localhost:5000"  # MLflow server in Jenkins CI
 elif os.getenv("DOCKER", "false") == "true":
     MLFLOW_TRACKING_URI = "http://mlflow:5000"  # Docker Compose network
 else:
     MLFLOW_TRACKING_URI = "http://localhost:5000"  # Local development in WSL 2
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data")
-MODEL_DIR = "models"
+MODEL_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models")
 RAW_DATA_DIR = os.path.join(DATA_DIR, "raw_data")
 train_path = os.path.join(RAW_DATA_DIR, "churn-bigml-80.csv")
 test_path = os.path.join(RAW_DATA_DIR, "churn-bigml-20.csv")
@@ -49,12 +49,16 @@ def home():
 
 def send_email(subject, body, to_email):
     try:
-        # Email configuration (replace with your SMTP settings)
-        smtp_server = "smtp.gmail.com"  # Example: Gmail SMTP
-        smtp_port = 587  # TLS port for Gmail
-        sender_email = "maryemessaidi8@gmail.com"  # Replace with your email
-        sender_password = os.getenv("EMAIL_PASSWORD", "epcu lndl gwiy wole")  # Use app password for Gmail, store in environment
-        recipient_email = to_email  # Replace with recipient email
+        # Email configuration (use environment variables)
+        smtp_server = "smtp.gmail.com"
+        smtp_port = 587
+        sender_email = os.getenv("SENDER_EMAIL", "maryemessaidi8@gmail.com")
+        sender_password = os.getenv("EMAIL_PASSWORD")  # Ensure this is a Gmail App Password
+        recipient_email = to_email
+
+        if not sender_password:
+            logging.error("EMAIL_PASSWORD environment variable not set.")
+            return
 
         msg = MIMEText(body)
         msg['Subject'] = subject
@@ -92,7 +96,7 @@ async def prepare_data_endpoint(train_file: UploadFile = File(...), test_file: U
             mlflow.log_artifact("model_pipeline/preprocessing.py", "code_artifact")
             logging.info("Data preparation completed and saved.")
             run_id = mlflow.active_run().info.run_id
-        send_email("Pipeline Step Completed: Prepare Data", f"Data preparation completed. Run ID: {run_id}", os.getenv("RECIPIENT_EMAIL", "recipient@example.com"))
+        send_email("Pipeline Step Completed: Prepare Data", f"Data preparation completed. Run ID: {run_id}", os.getenv("RECIPIENT_EMAIL", "Maryem.Essaidi@esprit.tn"))
         return {"status": "Data prepared successfully"}
     except Exception as e:
         logging.error(f"Error in data preparation: {str(e)}")
@@ -118,7 +122,7 @@ def train():
             mlflow.log_artifact("model_pipeline/training.py", "code_artifact")
             logging.info("Model training completed and saved.")
             run_id = mlflow.active_run().info.run_id
-        send_email("Pipeline Step Completed: Train Model", f"Model training completed. Run ID: {run_id}", os.getenv("RECIPIENT_EMAIL", "recipient@example.com"))
+        send_email("Pipeline Step Completed: Train Model", f"Model training completed. Run ID: {run_id}", os.getenv("RECIPIENT_EMAIL", "Maryem.Essaidi@esprit.tn"))
         return {"status": "Model trained successfully"}
     except Exception as e:
         logging.error(f"Error in training: {str(e)}")
@@ -143,14 +147,10 @@ def evaluate():
             mlflow.log_artifact(MODEL_PATH)
             mlflow.log_artifact(__file__, "code_artifact")
             mlflow.log_artifact("model_pipeline/evaluation.py", "code_artifact")
-            print("\nModel Performance:")
-            print(f"Accuracy: {metrics['accuracy']:.4f}")
-            print(f"ROC AUC Score: {metrics['roc_auc']:.4f}")
-            print("\nClassification Report:\n")
-            print(metrics["classification_report"])
             logging.info("Model evaluation completed.")
             run_id = mlflow.active_run().info.run_id
-        send_email("Pipeline Step Completed: Evaluate Model", f"Model evaluation completed. Metrics: {metrics}. Run ID: {run_id}", os.getenv("RECIPIENT_EMAIL", "recipient@example.com"))
+        message = f"Model evaluation completed. Metrics: Accuracy={metrics['accuracy']:.4f}, ROC AUC={metrics['roc_auc']:.4f}. Run ID: {run_id}"
+        send_email("Pipeline Step Completed: Evaluate Model", message, os.getenv("RECIPIENT_EMAIL", "Maryem.Essaidi@esprit.tn"))
         return metrics
     except Exception as e:
         logging.error(f"Evaluation error: {str(e)}")
@@ -173,14 +173,14 @@ def predict(file: UploadFile = File(...)):
             mlflow.log_artifact(__file__, "code_artifact")
             mlflow.log_artifact("model_pipeline/prediction.py", "code_artifact")
             run_id = mlflow.active_run().info.run_id
-        send_email("Pipeline Step Completed: Predict", f"Predictions completed. Run ID: {run_id}", os.getenv("RECIPIENT_EMAIL", "recipient@example.com"))
+        send_email("Pipeline Step Completed: Predict", f"Predictions completed. Run ID: {run_id}", os.getenv("RECIPIENT_EMAIL", "Maryem.Essaidi@esprit.tn"))
         return {"predictions": predictions.tolist()}
     except Exception as e:
         logging.error(f"Prediction error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/retrain")  # New endpoint for excellence
+@app.post("/retrain")
 def retrain():
     try:
         if not os.path.exists(PREPARED_DATA_PATH):
@@ -199,7 +199,7 @@ def retrain():
             mlflow.log_artifact("model_pipeline/training.py", "code_artifact")
             logging.info("Model retraining completed and saved.")
             run_id = mlflow.active_run().info.run_id
-        send_email("Pipeline Step Completed: Retrain Model", f"Model retraining completed. Run ID: {run_id}", os.getenv("RECIPIENT_EMAIL", "recipient@example.com"))
+        send_email("Pipeline Step Completed: Retrain Model", f"Model retraining completed. Run ID: {run_id}", os.getenv("RECIPIENT_EMAIL", "Maryem.Essaidi@esprit.tn"))
         return {"status": "Model retrained successfully"}
     except Exception as e:
         logging.error(f"Error in retraining: {str(e)}")
@@ -233,8 +233,8 @@ def run_pipeline(args):
                 mlflow.log_artifact(__file__, "code_artifact")
                 mlflow.log_artifact("model_pipeline/preprocessing.py", "code_artifact")
                 logging.info("Data preparation completed and saved.")
-                run_id = mlflow.active_run().info.run_id  # Store run ID before the block ends
-            send_email("Pipeline Step Completed: Prepare Data", f"Data preparation completed. Run ID: {run_id}", os.getenv("RECIPIENT_EMAIL", "recipient@example.com"))
+                run_id = mlflow.active_run().info.run_id
+            send_email("Pipeline Step Completed: Prepare Data", f"Data preparation completed. Run ID: {run_id}", os.getenv("RECIPIENT_EMAIL", "Maryem.Essaidi@esprit.tn"))
 
         if args.train:
             if not os.path.exists(PREPARED_DATA_PATH):
@@ -253,7 +253,7 @@ def run_pipeline(args):
                 mlflow.log_artifact("model_pipeline/training.py", "code_artifact")
                 logging.info("Model training completed and saved.")
                 run_id = mlflow.active_run().info.run_id
-            send_email("Pipeline Step Completed: Train Model", f"Model training completed. Run ID: {run_id}", os.getenv("RECIPIENT_EMAIL", "recipient@example.com"))
+            send_email("Pipeline Step Completed: Train Model", f"Model training completed. Run ID: {run_id}", os.getenv("RECIPIENT_EMAIL", "Maryem.Essaidi@esprit.tn"))
 
         if args.evaluate:
             if not os.path.exists(MODEL_PATH):
@@ -279,7 +279,8 @@ def run_pipeline(args):
                 print(metrics["classification_report"])
                 logging.info("Model evaluation completed.")
                 run_id = mlflow.active_run().info.run_id
-            send_email("Pipeline Step Completed: Evaluate Model", f"Model evaluation completed. Metrics: {metrics}. Run ID: {run_id}", os.getenv("RECIPIENT_EMAIL", "recipient@example.com"))
+            message = f"Model evaluation completed. Metrics: Accuracy={metrics['accuracy']:.4f}, ROC AUC={metrics['roc_auc']:.4f}. Run ID: {run_id}"
+            send_email("Pipeline Step Completed: Evaluate Model", message, os.getenv("RECIPIENT_EMAIL", "Maryem.Essaidi@esprit.tn"))
 
         if args.retrain:
             if not os.path.exists(PREPARED_DATA_PATH):
@@ -298,7 +299,7 @@ def run_pipeline(args):
                 mlflow.log_artifact("model_pipeline/training.py", "code_artifact")
                 logging.info("Model retraining completed and saved.")
                 run_id = mlflow.active_run().info.run_id
-            send_email("Pipeline Step Completed: Retrain Model", f"Model retraining completed. Run ID: {run_id}", os.getenv("RECIPIENT_EMAIL", "recipient@example.com"))
+            send_email("Pipeline Step Completed: Retrain Model", f"Model retraining completed. Run ID: {run_id}", os.getenv("RECIPIENT_EMAIL", "Maryem.Essaidi@esprit.tn"))
 
     except Exception as e:
         logging.error(f"Pipeline execution failed: {str(e)}")
