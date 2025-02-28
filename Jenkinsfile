@@ -20,6 +20,7 @@ pipeline {
                 sh '''
                     . venv/bin/activate
                     python3 -m pip install --upgrade pip
+                    python3 -m pip install setuptools
                     python3 -m pip install -r backend/requirements.txt -r frontend/requirements.txt
                 '''
             }
