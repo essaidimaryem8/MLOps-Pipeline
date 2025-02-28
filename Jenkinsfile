@@ -39,7 +39,8 @@ pipeline {
             steps {
                 dir('backend') {
                     sh 'nohup mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow.db --default-artifact-root ./mlruns &'
-                    sh 'sleep 15'  # Wait for server to start
+                    // Wait for server to start
+                    sh 'sleep 15'
                 }
             }
         }
@@ -66,9 +67,10 @@ pipeline {
                 sh 'docker-compose down'
                 sh 'docker-compose build backend mlflow elasticsearch kibana'
                 sh 'docker-compose up -d backend mlflow elasticsearch kibana'
-                sh 'sleep 15'  # Wait for services to start
+                // Wait for services to start
+                sh 'sleep 15'
                 sh 'docker exec backend python /app/main.py --prepare_data --train --evaluate --retrain'
-                sh 'mlflow experiments --experiment-name GBM_Experiment'  # Verify tracking
+                sh 'mlflow experiments --experiment-name GBM_Experiment'  // Verify tracking
             }
         }
         stage('Deploy') {
