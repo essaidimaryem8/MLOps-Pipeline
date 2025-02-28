@@ -100,11 +100,17 @@ def test_evaluate():
     mock_model = MagicMock()
     mock_model.predict.return_value = [True, False]  # Matches the 2 samples in test_df
 
+    # Mock evaluate_model to avoid calling the real function and causing recursion
     with patch("pandas.read_csv", side_effect=[train_df, test_df, test_df]), \
          patch("model_pipeline.preprocessing.preprocess_data", side_effect=[(train_df, test_df), (None, eval_test_df)]), \
          patch("model_pipeline.training.train_gbm", return_value=mock_model) as mock_train, \
          patch("model_pipeline.io.save_model"), \
          patch("model_pipeline.io.load_model", return_value=mock_model), \
+         patch("model_pipeline.evaluation.evaluate_model", return_value={
+             "accuracy": 0.95,
+             "roc_auc": 0.9,
+             "classification_report": {}
+         }) as mock_evaluate, \
          patch("joblib.dump"), \
          patch("joblib.load", side_effect=lambda path: joblib_load_side_effect(path, train_df, test_df, mock_model)):
         client.post("/prepare_data", files={
