@@ -39,7 +39,9 @@ os.makedirs(MODEL_DIR, exist_ok=True)
 os.makedirs(RAW_DATA_DIR, exist_ok=True)
 
 mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
-if "pytest" not in os.environ.get("PYTEST_CURRENT_TEST", ""):
+
+
+if __name__ == "__main__":
     mlflow.set_experiment("GBM_Experiment")
 
 
