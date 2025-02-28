@@ -17,9 +17,12 @@ train_data = [
      "Total intl minutes": 7, "Voice mail plan": 1, "Number vmail messages": 10, "Churn": True}
 ]
 
+# Updated test_data to have two samples with different Churn values to satisfy SMOTE
 test_data = [
     {"Total day minutes": 80, "International plan": 0, "Customer service calls": 0,
-     "Total intl minutes": 4, "Voice mail plan": 0, "Number vmail messages": 0, "Churn": False}
+     "Total intl minutes": 4, "Voice mail plan": 0, "Number vmail messages": 0, "Churn": False},
+    {"Total day minutes": 85, "International plan": 0, "Customer service calls": 1,
+     "Total intl minutes": 5, "Voice mail plan": 0, "Number vmail messages": 0, "Churn": True}
 ]
 
 predict_data = [
@@ -31,7 +34,6 @@ predict_data = [
 # Helper function to convert list of dictionaries to DataFrame
 def to_dataframe(data):
     return pd.DataFrame(data)
-
 
 # Create a mock model with a predict method
 mock_model = MagicMock()

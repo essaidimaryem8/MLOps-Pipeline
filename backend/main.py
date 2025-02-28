@@ -201,7 +201,8 @@ def evaluate():
         # Since X_test doesn't have Churn (preprocessed), we need the original test data for evaluation
         test_data = pd.read_csv(TEST_PATH)
         test_data = test_data[SELECTED_FEATURES + ["Churn"]]
-        _, X_test = preprocess_data(test_data, test_data.drop('Churn', axis=1))
+        # Pass test_data.drop('Churn', axis=1) as the first argument, and None as the second to avoid SMOTE
+        _, X_test = preprocess_data(test_data.drop('Churn', axis=1), None)
         y_test = test_data['Churn'].astype(int)
         metrics = evaluate_model(model, X_test, y_test)
 
@@ -224,7 +225,6 @@ def evaluate():
     except Exception as e:
         logging.error(f"Evaluation error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Evaluation error: {str(e)}")
-
 
 @app.post("/predict")
 def predict(file: UploadFile = File(...)):
