@@ -126,6 +126,7 @@ def test_predict():
     assert "predictions" in response.json()
     assert response.json()["predictions"] == [{"Churn": True}]
 
+
 # Test /retrain endpoint
 def test_retrain():
     train_df = to_dataframe(train_data)
@@ -143,6 +144,7 @@ def test_retrain():
         response = client.post("/retrain")
     assert response.status_code == 200
     assert response.json()["status"] == "Model retrained successfully"
+
 
 # Test /login endpoint
 def test_login():
