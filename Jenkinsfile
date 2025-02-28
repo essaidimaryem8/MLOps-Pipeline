@@ -1,15 +1,17 @@
 pipeline {
     agent any
     environment {
-        DOCKER_HUB_USERNAME = 'essaidimaryem'
-        DOCKER_HUB_PASSWORD = credentials('DOCKER_CREDENTIALS')
+        DOCKER_HUB_USERNAME = 'essaidimaryem'  // Your Docker Hub username
+        DOCKER_HUB_PASSWORD = credentials('DOCKER_CREDENTIALS')  // Jenkins credential ID
         MLFLOW_TRACKING_URI = 'http://localhost:5000'
         JENKINS = 'true'
     }
     stages {
         stage('Checkout') {
             steps {
-                git branch: 'main', url: 'https://github.com/essaidimaryem8/ML-Pipeline.git'
+                git branch: 'main',
+                    credentialsId: 'ML_Pipeline',  // Specify the credential ID
+                    url: 'https://github.com/essaidimaryem8/ML-Pipeline.git'
             }
         }
         stage('Set Up Python') {
