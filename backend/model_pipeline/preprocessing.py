@@ -1,60 +1,74 @@
 import pandas as pd
-import numpy as np
-from sklearn.preprocessing import StandardScaler
-from sklearn.compose import ColumnTransformer
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import OneHotEncoder
+from sklearn.preprocessing import LabelEncoder
 from imblearn.over_sampling import SMOTE
 import logging
 
+# Set up logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
+# Selected features for the model
+SELECTED_FEATURES = [
+    "Total day minutes",
+    "International plan",
+    "Customer service calls",
+    "Total intl minutes",
+    "Voice mail plan",
+    "Number vmail messages"
+]
 
-def preprocess_data(data, test_data=None, is_train=True):
+def preprocess_data(train_data: pd.DataFrame, test_data: pd.DataFrame = None):
+    """
+    Preprocess the data by selecting features, encoding categorical variables, and applying SMOTE.
+    
+    Args:
+        train_data (pd.DataFrame): Training dataset.
+        test_data (pd.DataFrame, optional): Test dataset. If None, only preprocess train_data.
+    
+    Returns:
+        tuple: (preprocessed train_data, preprocessed test_data) or (preprocessed train_data, None)
+    """
     try:
-        if isinstance(data, pd.DataFrame):
-            train_df = data
-        else:
-            train_df = pd.read_csv(data)
-        test_df = pd.read_csv(test_data) if test_data else None
+        # Select only the specified features (and Churn for the target)
+        features = SELECTED_FEATURES.copy()
+        if 'Churn' in train_data.columns:
+            features.append('Churn')
+        train_data = train_data[features]
+        if test_data is not None:
+            test_data = test_data[SELECTED_FEATURES]
 
-        # Define categorical and numerical columns
-        categorical_cols = train_df.select_dtypes(include=['object', 'bool']).columns.tolist()
-        numerical_cols = train_df.select_dtypes(include=['int64', 'float64']).columns.tolist()
+        # Encode categorical variables: 'International plan' and 'Voice mail plan'
+        le = LabelEncoder()
+        categorical_cols = ['International plan', 'Voice mail plan']
+        
+        for col in categorical_cols:
+            if col in train_data.columns:
+                train_data[col] = le.fit_transform(train_data[col])
+                if test_data is not None and col in test_data.columns:
+                    test_data[col] = le.transform(test_data[col])
 
-        # Remove target column from features
-        if 'Churn' in categorical_cols:
-            categorical_cols.remove('Churn')
-        if 'Churn' in numerical_cols:
-            numerical_cols.remove('Churn')
+        if 'Churn' in train_data.columns:
+            # Encode the target variable 'Churn'
+            train_data['Churn'] = train_data['Churn'].astype(int)
 
-        # Preprocessing pipeline
-        preprocessor = ColumnTransformer(
-            transformers=[
-                ('num', StandardScaler(), numerical_cols),
-                ('cat', OneHotEncoder(drop='first', handle_unknown='ignore'), categorical_cols)
-            ])
+            # Separate features and target
+            X_train = train_data.drop('Churn', axis=1)
+            y_train = train_data['Churn']
 
-        # Apply preprocessing
-        if is_train:
-            X_train = train_df.drop(columns=['Churn'])
-            y_train = train_df['Churn'].astype(int)
+            # Apply SMOTE to balance the dataset
+            smote = SMOTE(random_state=42)
+            X_train, y_train = smote.fit_resample(X_train, y_train)
 
-            # Apply SMOTE only to training data
-            pipeline = Pipeline(steps=[
-                ('preprocessor', preprocessor),
-                ('smote', SMOTE(random_state=42))
-            ])
-            X_train_processed, y_train = pipeline.named_steps['smote'].fit_resample(
-                pipeline.named_steps['preprocessor'].fit_transform(X_train), y_train
-            )
-            logging.info("Data preprocessing completed successfully with balancing")
-            return X_train_processed, None, y_train, None
-        else:
-            X = preprocessor.fit_transform(data)
-            logging.info("Data preprocessing completed successfully")
-            return X, None, None
+            # Reconstruct the preprocessed training DataFrame
+            train_data = pd.DataFrame(X_train, columns=SELECTED_FEATURES)
+            train_data['Churn'] = y_train
+
+        # Ensure test_data has the same columns as train_data (excluding Churn)
+        if test_data is not None:
+            test_data = test_data[SELECTED_FEATURES]
+
+        logging.info("Data preprocessing completed successfully.")
+        return train_data, test_data
 
     except Exception as e:
-        logging.error(f"Error in data preprocessing: {str(e)}")
+        logging.error(f"Error in preprocessing data: {str(e)}")
         raise
