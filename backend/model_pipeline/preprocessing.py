@@ -40,7 +40,7 @@ def preprocess_data(train_data: pd.DataFrame, test_data: pd.DataFrame = None):
         # Encode categorical variables: 'International plan' and 'Voice mail plan'
         le = LabelEncoder()
         categorical_cols = ['International plan', 'Voice mail plan']
-    
+
         for col in categorical_cols:
             if col in train_data.columns:
                 train_data[col] = le.fit_transform(train_data[col])
