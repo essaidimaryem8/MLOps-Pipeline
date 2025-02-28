@@ -65,6 +65,7 @@ def test_prepare_data():
     assert response.status_code == 200
     assert response.json()["status"] == "Data prepared successfully"
 
+
 # Test /train endpoint
 def test_train():
     # Prepare data first
