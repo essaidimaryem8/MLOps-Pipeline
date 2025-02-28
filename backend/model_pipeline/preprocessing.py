@@ -20,11 +20,11 @@ SELECTED_FEATURES = [
 def preprocess_data(train_data: pd.DataFrame, test_data: pd.DataFrame = None):
     """
     Preprocess the data by selecting features, encoding categorical variables, and applying SMOTE.
-    
+
     Args:
         train_data (pd.DataFrame): Training dataset.
         test_data (pd.DataFrame, optional): Test dataset. If None, only preprocess train_data.
-    
+
     Returns:
         tuple: (preprocessed train_data, preprocessed test_data) or (preprocessed train_data, None)
     """
@@ -40,7 +40,7 @@ def preprocess_data(train_data: pd.DataFrame, test_data: pd.DataFrame = None):
         # Encode categorical variables: 'International plan' and 'Voice mail plan'
         le = LabelEncoder()
         categorical_cols = ['International plan', 'Voice mail plan']
-        
+    
         for col in categorical_cols:
             if col in train_data.columns:
                 train_data[col] = le.fit_transform(train_data[col])
