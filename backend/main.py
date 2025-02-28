@@ -25,7 +25,7 @@ RAW_DATA_DIR = os.path.join(DATA_DIR, "raw_data")
 TRAIN_PATH = os.path.join(RAW_DATA_DIR, "churn-bigml-80.csv")
 TEST_PATH = os.path.join(RAW_DATA_DIR, "churn-bigml-20.csv")
 PREPARED_DATA_PATH = os.path.join(DATA_DIR, "prepared_data.joblib")
-MODEL_PATH = os.path.join(MODEL_DIR, "GBM_model.joblib")
+MODEL_PATH = os.path.join(MODEL_DIR, "GBM_model.joblib")  # Ensure this is a file path
 
 # Create directories if they don't exist
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -42,6 +42,10 @@ SELECTED_FEATURES = [
     "Number vmail messages"
 ]
 
+# Check if running in test mode (to disable MLflow)
+IS_TESTING = os.getenv("TESTING", "false") == "true"
+
+
 # Use MLFLOW_TRACKING_URI environment variable if set, otherwise determine based on environment
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI")
 if not MLFLOW_TRACKING_URI:
@@ -55,8 +59,8 @@ if not MLFLOW_TRACKING_URI:
 mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
 
 
-# Only set up MLflow experiment if running the script directly (not during imports like in tests)
-if __name__ == "__main__":
+# Only set up MLflow experiment if running the script directly and not in test mode
+if __name__ == "__main__" and not IS_TESTING:
     mlflow.set_experiment("GBM_Experiment")
 
 
@@ -106,29 +110,34 @@ async def prepare_data_endpoint(train_file: UploadFile = File(...), test_file: U
         with open(test_path_api, "wb") as f:
             f.write(await test_file.read())
 
-        run_id = None
-        with mlflow.start_run(run_name="Data Preparation"):
-            logging.info("Starting data preparation...")
-            # Read and preprocess data
-            train_data = pd.read_csv(train_path_api)
-            test_data = pd.read_csv(test_path_api)
-            # Filter to selected features (plus Churn for train_data)
-            train_columns = SELECTED_FEATURES + ["Churn"] if "Churn" in train_data.columns else SELECTED_FEATURES
-            test_columns = SELECTED_FEATURES
-            train_data = train_data[train_columns]
-            test_data = test_data[test_columns]
-            # Preprocess the data
-            X_train, X_test = preprocess_data(train_data, test_data)
-            # Save the preprocessed data
-            joblib.dump((X_train, X_test), PREPARED_DATA_PATH)
-            mlflow.log_param("train_file", train_file.filename)
-            mlflow.log_param("test_file", test_file.filename)
-            mlflow.log_artifact(PREPARED_DATA_PATH)
-            mlflow.log_artifact(__file__, "code_artifact")
-            mlflow.log_artifact("model_pipeline/preprocessing.py", "code_artifact")
-            logging.info("Data preparation completed and saved.")
-            run_id = mlflow.active_run().info.run_id
-        send_email("Pipeline Step Completed: Prepare Data", f"Data preparation completed. Run ID: {run_id}", os.getenv("RECIPIENT_EMAIL", "maryem.essaidi@esprit.tn"))
+        # Read and preprocess data
+        train_data = pd.read_csv(train_path_api)
+        test_data = pd.read_csv(test_path_api)
+        # Filter to selected features (plus Churn for train_data)
+        train_columns = SELECTED_FEATURES + ["Churn"] if "Churn" in train_data.columns else SELECTED_FEATURES
+        test_columns = SELECTED_FEATURES
+        train_data = train_data[train_columns]
+        test_data = test_data[test_columns]
+        # Preprocess the data
+        X_train, X_test = preprocess_data(train_data, test_data)
+        # Save the preprocessed data
+        joblib.dump((X_train, X_test), PREPARED_DATA_PATH)
+
+        # Skip MLflow logging during tests
+        if not IS_TESTING:
+            with mlflow.start_run(run_name="Data Preparation"):
+                logging.info("Starting data preparation...")
+                mlflow.log_param("train_file", train_file.filename)
+                mlflow.log_param("test_file", test_file.filename)
+                mlflow.log_artifact(PREPARED_DATA_PATH)
+                mlflow.log_artifact(__file__, "code_artifact")
+                mlflow.log_artifact("model_pipeline/preprocessing.py", "code_artifact")
+                logging.info("Data preparation completed and saved.")
+                run_id = mlflow.active_run().info.run_id
+            send_email("Pipeline Step Completed: Prepare Data", f"Data preparation completed. Run ID: {run_id}", os.getenv("RECIPIENT_EMAIL", "maryem.essaidi@esprit.tn"))
+        else:
+            logging.info("Skipping MLflow logging during tests.")
+
         return {"status": "Data prepared successfully"}
     except Exception as e:
         logging.error(f"Error in data preparation: {str(e)}")
@@ -144,23 +153,32 @@ def train():
         if not os.path.exists(PREPARED_DATA_PATH):
             raise HTTPException(status_code=400, detail="Prepared data not found. Run /prepare_data first.")
 
-        run_id = None
-        with mlflow.start_run(run_name="Model Training"):
-            logging.info("Training the Gradient Boosting Model...")
+        # Skip MLflow logging during tests
+        if not IS_TESTING:
+            with mlflow.start_run(run_name="Model Training"):
+                logging.info("Training the Gradient Boosting Model...")
+                X_train, X_test = joblib.load(PREPARED_DATA_PATH)
+                # Extract features and target
+                y_train = X_train['Churn']
+                X_train = X_train.drop('Churn', axis=1)
+                gbm_model = train_gbm(X_train, y_train)
+                save_model(gbm_model, MODEL_PATH)
+                mlflow.sklearn.log_model(gbm_model, "model")
+                mlflow.log_param("n_estimators", 120)
+                mlflow.log_param("learning_rate", 0.08)
+                mlflow.log_artifact(__file__, "code_artifact")
+                mlflow.log_artifact("model_pipeline/training.py", "code_artifact")
+                logging.info("Model training completed and saved.")
+                run_id = mlflow.active_run().info.run_id
+            send_email("Pipeline Step Completed: Train Model", f"Model training completed. Run ID: {run_id}", os.getenv("RECIPIENT_EMAIL", "maryem.essaidi@esprit.tn"))
+        else:
+            logging.info("Skipping MLflow logging during tests.")
             X_train, X_test = joblib.load(PREPARED_DATA_PATH)
-            # Extract features and target
             y_train = X_train['Churn']
             X_train = X_train.drop('Churn', axis=1)
             gbm_model = train_gbm(X_train, y_train)
             save_model(gbm_model, MODEL_PATH)
-            mlflow.sklearn.log_model(gbm_model, "model")
-            mlflow.log_param("n_estimators", 120)
-            mlflow.log_param("learning_rate", 0.08)
-            mlflow.log_artifact(__file__, "code_artifact")
-            mlflow.log_artifact("model_pipeline/training.py", "code_artifact")
-            logging.info("Model training completed and saved.")
-            run_id = mlflow.active_run().info.run_id
-        send_email("Pipeline Step Completed: Train Model", f"Model training completed. Run ID: {run_id}", os.getenv("RECIPIENT_EMAIL", "maryem.essaidi@esprit.tn"))
+
         return {"status": "Model trained successfully"}
     except Exception as e:
         logging.error(f"Error in training: {str(e)}")
@@ -178,25 +196,30 @@ def evaluate():
         if not os.path.exists(PREPARED_DATA_PATH):
             raise HTTPException(status_code=400, detail="Prepared data not found. Run /prepare_data first.")
 
-        run_id = None
-        with mlflow.start_run(run_name="Model Evaluation"):
-            logging.info("Evaluating the model...")
-            model = load_model(MODEL_PATH)
-            X_train, X_test = joblib.load(PREPARED_DATA_PATH)
-            # Since X_test doesn't have Churn (preprocessed), we need the original test data for evaluation
-            test_data = pd.read_csv(TEST_PATH)
-            test_data = test_data[SELECTED_FEATURES + ["Churn"]]
-            _, X_test = preprocess_data(test_data, test_data.drop('Churn', axis=1))
-            y_test = test_data['Churn'].astype(int)
-            metrics = evaluate_model(model, X_test, y_test)
-            mlflow.log_metrics({"accuracy": metrics["accuracy"], "roc_auc": metrics["roc_auc"]})
-            mlflow.log_artifact(MODEL_PATH)
-            mlflow.log_artifact(__file__, "code_artifact")
-            mlflow.log_artifact("model_pipeline/evaluation.py", "code_artifact")
-            logging.info("Model evaluation completed.")
-            run_id = mlflow.active_run().info.run_id
-        message = f"Model evaluation completed. Metrics: Accuracy={metrics['accuracy']:.4f}, ROC AUC={metrics['roc_auc']:.4f}. Run ID: {run_id}"
-        send_email("Pipeline Step Completed: Evaluate Model", message, os.getenv("RECIPIENT_EMAIL", "maryem.essaidi@esprit.tn"))
+        model = load_model(MODEL_PATH)
+        X_train, X_test = joblib.load(PREPARED_DATA_PATH)
+        # Since X_test doesn't have Churn (preprocessed), we need the original test data for evaluation
+        test_data = pd.read_csv(TEST_PATH)
+        test_data = test_data[SELECTED_FEATURES + ["Churn"]]
+        _, X_test = preprocess_data(test_data, test_data.drop('Churn', axis=1))
+        y_test = test_data['Churn'].astype(int)
+        metrics = evaluate_model(model, X_test, y_test)
+
+        # Skip MLflow logging during tests
+        if not IS_TESTING:
+            with mlflow.start_run(run_name="Model Evaluation"):
+                logging.info("Evaluating the model...")
+                mlflow.log_metrics({"accuracy": metrics["accuracy"], "roc_auc": metrics["roc_auc"]})
+                mlflow.log_artifact(MODEL_PATH)
+                mlflow.log_artifact(__file__, "code_artifact")
+                mlflow.log_artifact("model_pipeline/evaluation.py", "code_artifact")
+                logging.info("Model evaluation completed.")
+                run_id = mlflow.active_run().info.run_id
+            message = f"Model evaluation completed. Metrics: Accuracy={metrics['accuracy']:.4f}, ROC AUC={metrics['roc_auc']:.4f}. Run ID: {run_id}"
+            send_email("Pipeline Step Completed: Evaluate Model", message, os.getenv("RECIPIENT_EMAIL", "maryem.essaidi@esprit.tn"))
+        else:
+            logging.info("Skipping MLflow logging during tests.")
+
         return metrics
     except Exception as e:
         logging.error(f"Evaluation error: {str(e)}")
@@ -212,22 +235,27 @@ def predict(file: UploadFile = File(...)):
         if not os.path.exists(MODEL_PATH):
             raise HTTPException(status_code=400, detail="Model not found. Run /train first.")
 
-        run_id = None
-        with mlflow.start_run(run_name="Prediction"):
-            logging.info("Predicting churn...")
-            model = load_model(MODEL_PATH)
-            df = pd.read_csv(file.file)
-            # Filter to only the selected features
-            df = df[SELECTED_FEATURES]
-            X, _ = preprocess_data(df)
-            predictions = model.predict(X)
-            df['Churn'] = predictions
-            result = df.to_dict(orient="records")
-            mlflow.log_param("prediction_file", file.filename)
-            mlflow.log_artifact(__file__, "code_artifact")
-            mlflow.log_artifact("model_pipeline/preprocessing.py", "code_artifact")
-            run_id = mlflow.active_run().info.run_id
-        send_email("Pipeline Step Completed: Predict", f"Predictions completed. Run ID: {run_id}", os.getenv("RECIPIENT_EMAIL", "maryem.essaidi@esprit.tn"))
+        model = load_model(MODEL_PATH)
+        df = pd.read_csv(file.file)
+        # Filter to only the selected features
+        df = df[SELECTED_FEATURES]
+        X, _ = preprocess_data(df)
+        predictions = model.predict(X)
+        df['Churn'] = predictions
+        result = df.to_dict(orient="records")
+
+        # Skip MLflow logging during tests
+        if not IS_TESTING:
+            with mlflow.start_run(run_name="Prediction"):
+                logging.info("Predicting churn...")
+                mlflow.log_param("prediction_file", file.filename)
+                mlflow.log_artifact(__file__, "code_artifact")
+                mlflow.log_artifact("model_pipeline/preprocessing.py", "code_artifact")
+                run_id = mlflow.active_run().info.run_id
+            send_email("Pipeline Step Completed: Predict", f"Predictions completed. Run ID: {run_id}", os.getenv("RECIPIENT_EMAIL", "maryem.essaidi@esprit.tn"))
+        else:
+            logging.info("Skipping MLflow logging during tests.")
+
         return {"predictions": result}
     except Exception as e:
         logging.error(f"Prediction error: {str(e)}")
@@ -243,23 +271,32 @@ def retrain():
         if not os.path.exists(PREPARED_DATA_PATH):
             raise HTTPException(status_code=400, detail="Prepared data not found. Run /prepare_data first.")
 
-        run_id = None
-        with mlflow.start_run(run_name="Model Retraining"):
-            logging.info("Retraining the Gradient Boosting Model...")
+        # Skip MLflow logging during tests
+        if not IS_TESTING:
+            with mlflow.start_run(run_name="Model Retraining"):
+                logging.info("Retraining the Gradient Boosting Model...")
+                X_train, X_test = joblib.load(PREPARED_DATA_PATH)
+                # Extract features and target
+                y_train = X_train['Churn']
+                X_train = X_train.drop('Churn', axis=1)
+                gbm_model = train_gbm(X_train, y_train)
+                save_model(gbm_model, MODEL_PATH)
+                mlflow.sklearn.log_model(gbm_model, "retrained_model")
+                mlflow.log_param("n_estimators", 120)
+                mlflow.log_param("learning_rate", 0.08)
+                mlflow.log_artifact(__file__, "code_artifact")
+                mlflow.log_artifact("model_pipeline/training.py", "code_artifact")
+                logging.info("Model retraining completed and saved.")
+                run_id = mlflow.active_run().info.run_id
+            send_email("Pipeline Step Completed: Retrain Model", f"Model retraining completed. Run ID: {run_id}", os.getenv("RECIPIENT_EMAIL", "maryem.essaidi@esprit.tn"))
+        else:
+            logging.info("Skipping MLflow logging during tests.")
             X_train, X_test = joblib.load(PREPARED_DATA_PATH)
-            # Extract features and target
             y_train = X_train['Churn']
             X_train = X_train.drop('Churn', axis=1)
             gbm_model = train_gbm(X_train, y_train)
             save_model(gbm_model, MODEL_PATH)
-            mlflow.sklearn.log_model(gbm_model, "retrained_model")
-            mlflow.log_param("n_estimators", 120)
-            mlflow.log_param("learning_rate", 0.08)
-            mlflow.log_artifact(__file__, "code_artifact")
-            mlflow.log_artifact("model_pipeline/training.py", "code_artifact")
-            logging.info("Model retraining completed and saved.")
-            run_id = mlflow.active_run().info.run_id
-        send_email("Pipeline Step Completed: Retrain Model", f"Model retraining completed. Run ID: {run_id}", os.getenv("RECIPIENT_EMAIL", "maryem.essaidi@esprit.tn"))
+
         return {"status": "Model retrained successfully"}
     except Exception as e:
         logging.error(f"Error in retraining: {str(e)}")
@@ -288,47 +325,57 @@ def run_pipeline(args):
             if not os.path.exists(TRAIN_PATH) or not os.path.exists(TEST_PATH):
                 logging.error("Training or test data file not found. Please upload via the frontend first.")
                 raise FileNotFoundError("Training or test data file not found.")
-            run_id = None
-            with mlflow.start_run(run_name="Data Preparation"):
-                logging.info("Starting data preparation...")
-                train_data = pd.read_csv(TRAIN_PATH)
-                test_data = pd.read_csv(TEST_PATH)
-                # Filter to selected features (plus Churn for train_data)
-                train_columns = SELECTED_FEATURES + ["Churn"] if "Churn" in train_data.columns else SELECTED_FEATURES
-                test_columns = SELECTED_FEATURES
-                train_data = train_data[train_columns]
-                test_data = test_data[test_columns]
-                X_train, X_test = preprocess_data(train_data, test_data)
-                joblib.dump((X_train, X_test), PREPARED_DATA_PATH)
-                mlflow.log_param("train_file", TRAIN_PATH)
-                mlflow.log_param("test_file", TEST_PATH)
-                mlflow.log_artifact(PREPARED_DATA_PATH)
-                mlflow.log_artifact(__file__, "code_artifact")
-                mlflow.log_artifact("model_pipeline/preprocessing.py", "code_artifact")
-                logging.info("Data preparation completed and saved.")
-                run_id = mlflow.active_run().info.run_id
-            send_email("Pipeline Step Completed: Prepare Data", f"Data preparation completed. Run ID: {run_id}", os.getenv("RECIPIENT_EMAIL", "maryem.essaidi@esprit.tn"))
+            train_data = pd.read_csv(TRAIN_PATH)
+            test_data = pd.read_csv(TEST_PATH)
+            # Filter to selected features (plus Churn for train_data)
+            train_columns = SELECTED_FEATURES + ["Churn"] if "Churn" in train_data.columns else SELECTED_FEATURES
+            test_columns = SELECTED_FEATURES
+            train_data = train_data[train_columns]
+            test_data = test_data[test_columns]
+            X_train, X_test = preprocess_data(train_data, test_data)
+            joblib.dump((X_train, X_test), PREPARED_DATA_PATH)
+
+            if not IS_TESTING:
+                with mlflow.start_run(run_name="Data Preparation"):
+                    logging.info("Starting data preparation...")
+                    mlflow.log_param("train_file", TRAIN_PATH)
+                    mlflow.log_param("test_file", TEST_PATH)
+                    mlflow.log_artifact(PREPARED_DATA_PATH)
+                    mlflow.log_artifact(__file__, "code_artifact")
+                    mlflow.log_artifact("model_pipeline/preprocessing.py", "code_artifact")
+                    logging.info("Data preparation completed and saved.")
+                    run_id = mlflow.active_run().info.run_id
+                send_email("Pipeline Step Completed: Prepare Data", f"Data preparation completed. Run ID: {run_id}", os.getenv("RECIPIENT_EMAIL", "maryem.essaidi@esprit.tn"))
+            else:
+                logging.info("Skipping MLflow logging during tests.")
 
         if args.train:
             if not os.path.exists(PREPARED_DATA_PATH):
                 logging.error("Prepared data not found. Run --prepare_data first.")
                 raise FileNotFoundError("Prepared data not found.")
-            run_id = None
-            with mlflow.start_run(run_name="Model Training"):
-                logging.info("Training the Gradient Boosting Model...")
+            if not IS_TESTING:
+                with mlflow.start_run(run_name="Model Training"):
+                    logging.info("Training the Gradient Boosting Model...")
+                    X_train, X_test = joblib.load(PREPARED_DATA_PATH)
+                    y_train = X_train['Churn']
+                    X_train = X_train.drop('Churn', axis=1)
+                    gbm_model = train_gbm(X_train, y_train)
+                    save_model(gbm_model, MODEL_PATH)
+                    mlflow.sklearn.log_model(gbm_model, "model")
+                    mlflow.log_param("n_estimators", 120)
+                    mlflow.log_param("learning_rate", 0.08)
+                    mlflow.log_artifact(__file__, "code_artifact")
+                    mlflow.log_artifact("model_pipeline/training.py", "code_artifact")
+                    logging.info("Model training completed and saved.")
+                    run_id = mlflow.active_run().info.run_id
+                send_email("Pipeline Step Completed: Train Model", f"Model training completed. Run ID: {run_id}", os.getenv("RECIPIENT_EMAIL", "maryem.essaidi@esprit.tn"))
+            else:
+                logging.info("Skipping MLflow logging during tests.")
                 X_train, X_test = joblib.load(PREPARED_DATA_PATH)
                 y_train = X_train['Churn']
                 X_train = X_train.drop('Churn', axis=1)
                 gbm_model = train_gbm(X_train, y_train)
                 save_model(gbm_model, MODEL_PATH)
-                mlflow.sklearn.log_model(gbm_model, "model")
-                mlflow.log_param("n_estimators", 120)
-                mlflow.log_param("learning_rate", 0.08)
-                mlflow.log_artifact(__file__, "code_artifact")
-                mlflow.log_artifact("model_pipeline/training.py", "code_artifact")
-                logging.info("Model training completed and saved.")
-                run_id = mlflow.active_run().info.run_id
-            send_email("Pipeline Step Completed: Train Model", f"Model training completed. Run ID: {run_id}", os.getenv("RECIPIENT_EMAIL", "maryem.essaidi@esprit.tn"))
 
         if args.evaluate:
             if not os.path.exists(MODEL_PATH):
@@ -337,50 +384,59 @@ def run_pipeline(args):
             if not os.path.exists(PREPARED_DATA_PATH):
                 logging.error("Prepared data not found. Run --prepare_data first.")
                 raise FileNotFoundError("Prepared data not found.")
-            run_id = None
-            with mlflow.start_run(run_name="Model Evaluation"):
-                logging.info("Evaluating the model...")
-                model = load_model(MODEL_PATH)
-                X_train, X_test = joblib.load(PREPARED_DATA_PATH)
-                test_data = pd.read_csv(TEST_PATH)
-                test_data = test_data[SELECTED_FEATURES + ["Churn"]]
-                _, X_test = preprocess_data(test_data, test_data.drop('Churn', axis=1))
-                y_test = test_data['Churn'].astype(int)
-                metrics = evaluate_model(model, X_test, y_test)
-                mlflow.log_metrics({"accuracy": metrics["accuracy"], "roc_auc": metrics["roc_auc"]})
-                mlflow.log_artifact(MODEL_PATH)
-                mlflow.log_artifact(__file__, "code_artifact")
-                mlflow.log_artifact("model_pipeline/evaluation.py", "code_artifact")
-                print("\nModel Performance:")
-                print(f"Accuracy: {metrics['accuracy']:.4f}")
-                print(f"ROC AUC Score: {metrics['roc_auc']:.4f}")
-                print("\nClassification Report:\n")
-                print(metrics["classification_report"])
-                logging.info("Model evaluation completed.")
-                run_id = mlflow.active_run().info.run_id
-            message = f"Model evaluation completed. Metrics: Accuracy={metrics['accuracy']:.4f}, ROC AUC={metrics['roc_auc']:.4f}. Run ID: {run_id}"
-            send_email("Pipeline Step Completed: Evaluate Model", message, os.getenv("RECIPIENT_EMAIL", "maryem.essaidi@esprit.tn"))
+            model = load_model(MODEL_PATH)
+            X_train, X_test = joblib.load(PREPARED_DATA_PATH)
+            test_data = pd.read_csv(TEST_PATH)
+            test_data = test_data[SELECTED_FEATURES + ["Churn"]]
+            _, X_test = preprocess_data(test_data, test_data.drop('Churn', axis=1))
+            y_test = test_data['Churn'].astype(int)
+            metrics = evaluate_model(model, X_test, y_test)
+            if not IS_TESTING:
+                with mlflow.start_run(run_name="Model Evaluation"):
+                    logging.info("Evaluating the model...")
+                    mlflow.log_metrics({"accuracy": metrics["accuracy"], "roc_auc": metrics["roc_auc"]})
+                    mlflow.log_artifact(MODEL_PATH)
+                    mlflow.log_artifact(__file__, "code_artifact")
+                    mlflow.log_artifact("model_pipeline/evaluation.py", "code_artifact")
+                    print("\nModel Performance:")
+                    print(f"Accuracy: {metrics['accuracy']:.4f}")
+                    print(f"ROC AUC Score: {metrics['roc_auc']:.4f}")
+                    print("\nClassification Report:\n")
+                    print(metrics["classification_report"])
+                    logging.info("Model evaluation completed.")
+                    run_id = mlflow.active_run().info.run_id
+                message = f"Model evaluation completed. Metrics: Accuracy={metrics['accuracy']:.4f}, ROC AUC={metrics['roc_auc']:.4f}. Run ID: {run_id}"
+                send_email("Pipeline Step Completed: Evaluate Model", message, os.getenv("RECIPIENT_EMAIL", "maryem.essaidi@esprit.tn"))
+            else:
+                logging.info("Skipping MLflow logging during tests.")
 
         if args.retrain:
             if not os.path.exists(PREPARED_DATA_PATH):
                 logging.error("Prepared data not found. Run --prepare_data first.")
                 raise FileNotFoundError("Prepared data not found.")
-            run_id = None
-            with mlflow.start_run(run_name="Model Retraining"):
-                logging.info("Retraining the Gradient Boosting Model...")
+            if not IS_TESTING:
+                with mlflow.start_run(run_name="Model Retraining"):
+                    logging.info("Retraining the Gradient Boosting Model...")
+                    X_train, X_test = joblib.load(PREPARED_DATA_PATH)
+                    y_train = X_train['Churn']
+                    X_train = X_train.drop('Churn', axis=1)
+                    gbm_model = train_gbm(X_train, y_train)
+                    save_model(gbm_model, MODEL_PATH)
+                    mlflow.sklearn.log_model(gbm_model, "retrained_model")
+                    mlflow.log_param("n_estimators", 120)
+                    mlflow.log_param("learning_rate", 0.08)
+                    mlflow.log_artifact(__file__, "code_artifact")
+                    mlflow.log_artifact("model_pipeline/training.py", "code_artifact")
+                    logging.info("Model retraining completed and saved.")
+                    run_id = mlflow.active_run().info.run_id
+                send_email("Pipeline Step Completed: Retrain Model", f"Model retraining completed. Run ID: {run_id}", os.getenv("RECIPIENT_EMAIL", "maryem.essaidi@esprit.tn"))
+            else:
+                logging.info("Skipping MLflow logging during tests.")
                 X_train, X_test = joblib.load(PREPARED_DATA_PATH)
                 y_train = X_train['Churn']
                 X_train = X_train.drop('Churn', axis=1)
                 gbm_model = train_gbm(X_train, y_train)
                 save_model(gbm_model, MODEL_PATH)
-                mlflow.sklearn.log_model(gbm_model, "retrained_model")
-                mlflow.log_param("n_estimators", 120)
-                mlflow.log_param("learning_rate", 0.08)
-                mlflow.log_artifact(__file__, "code_artifact")
-                mlflow.log_artifact("model_pipeline/training.py", "code_artifact")
-                logging.info("Model retraining completed and saved.")
-                run_id = mlflow.active_run().info.run_id
-            send_email("Pipeline Step Completed: Retrain Model", f"Model retraining completed. Run ID: {run_id}", os.getenv("RECIPIENT_EMAIL", "maryem.essaidi@esprit.tn"))
 
     except Exception as e:
         logging.error(f"Pipeline execution failed: {str(e)}")

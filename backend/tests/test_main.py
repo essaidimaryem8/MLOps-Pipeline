@@ -9,17 +9,6 @@ import pandas as pd
 
 client = TestClient(app)
 
-
-# Mock MLflow to prevent server interactions during tests
-@pytest.fixture(autouse=True)
-def mock_mlflow():
-    with patch("mlflow.start_run", new=MagicMock()) as mock_start_run, \
-         patch("mlflow.log_param", new=MagicMock()), \
-         patch("mlflow.log_metric", new=MagicMock()), \
-         patch("mlflow.sklearn.log_model", new=MagicMock()):
-        yield mock_start_run
-
-
 # Static mock data for testing (small lists of dictionaries with correct column names)
 train_data = [
     {"Total day minutes": 100, "International plan": "No", "Customer service calls": 1,
@@ -50,9 +39,10 @@ def test_prepare_data():
     train_df = to_dataframe(train_data)
     test_df = to_dataframe(test_data)
 
-    # Mock pd.read_csv to return the correct DataFrames
+    # Mock pd.read_csv and joblib.dump
     with patch("pandas.read_csv", side_effect=[train_df, test_df]), \
-         patch("model_pipeline.preprocessing.preprocess_data", return_value=(train_df, test_df)) as mock_preprocess:
+         patch("model_pipeline.preprocessing.preprocess_data", return_value=(train_df, test_df)) as mock_preprocess, \
+         patch("joblib.dump") as mock_dump:
         response = client.post("/prepare_data", files={
             "train_file": ("churn-bigml-80.csv", b"mock_train_data", "text/csv"),
             "test_file": ("churn-bigml-20.csv", b"mock_test_data", "text/csv")
@@ -70,7 +60,9 @@ def test_train():
     with patch("pandas.read_csv", side_effect=[train_df, test_df]), \
          patch("model_pipeline.preprocessing.preprocess_data", return_value=(train_df, test_df)), \
          patch("model_pipeline.training.train_gbm", return_value=MagicMock()) as mock_train, \
-         patch("model_pipeline.io.save_model") as mock_save:
+         patch("model_pipeline.io.save_model"), \
+         patch("joblib.dump"), \
+         patch("joblib.load", return_value=(train_df, test_df)):
         client.post("/prepare_data", files={
             "train_file": ("churn-bigml-80.csv", b"mock_train_data", "text/csv"),
             "test_file": ("churn-bigml-20.csv", b"mock_test_data", "text/csv")
@@ -90,7 +82,9 @@ def test_evaluate():
          patch("model_pipeline.training.train_gbm", return_value=MagicMock()) as mock_train, \
          patch("model_pipeline.io.save_model"), \
          patch("model_pipeline.io.load_model", return_value=MagicMock()), \
-         patch("model_pipeline.evaluation.evaluate_model", return_value={"accuracy": 0.95}) as mock_evaluate:
+         patch("model_pipeline.evaluation.evaluate_model", return_value={"accuracy": 0.95}) as mock_evaluate, \
+         patch("joblib.dump"), \
+         patch("joblib.load", return_value=(train_df, test_df)):
         client.post("/prepare_data", files={
             "train_file": ("churn-bigml-80.csv", b"mock_train_data", "text/csv"),
             "test_file": ("churn-bigml-20.csv", b"mock_test_data", "text/csv")
@@ -113,7 +107,9 @@ def test_predict():
          patch("model_pipeline.training.train_gbm", return_value=MagicMock()) as mock_train, \
          patch("model_pipeline.io.save_model"), \
          patch("model_pipeline.io.load_model", return_value=MagicMock()) as mock_load, \
-         patch("pandas.DataFrame.to_dict", return_value=[{"Churn": True}]) as mock_to_dict:
+         patch("pandas.DataFrame.to_dict", return_value=[{"Churn": True}]) as mock_to_dict, \
+         patch("joblib.dump"), \
+         patch("joblib.load", return_value=(train_df, test_df)):
         client.post("/prepare_data", files={
             "train_file": ("churn-bigml-80.csv", b"mock_train_data", "text/csv"),
             "test_file": ("churn-bigml-20.csv", b"mock_test_data", "text/csv")
@@ -135,7 +131,9 @@ def test_retrain():
     with patch("pandas.read_csv", side_effect=[train_df, test_df]), \
          patch("model_pipeline.preprocessing.preprocess_data", return_value=(train_df, test_df)), \
          patch("model_pipeline.training.train_gbm", return_value=MagicMock()) as mock_train, \
-         patch("model_pipeline.io.save_model"):
+         patch("model_pipeline.io.save_model"), \
+         patch("joblib.dump"), \
+         patch("joblib.load", return_value=(train_df, test_df)):
         client.post("/prepare_data", files={
             "train_file": ("churn-bigml-80.csv", b"mock_train_data", "text/csv"),
             "test_file": ("churn-bigml-20.csv", b"mock_test_data", "text/csv")

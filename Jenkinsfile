@@ -35,16 +35,18 @@ pipeline {
             }
         }
         stage('Run Tests') {
-            steps {
-                dir('backend') {
-                    sh '''
-                        . ../venv/bin/activate
-                        export PYTHONPATH=$PYTHONPATH:..
-                        pytest tests/test_main.py -v
-                    '''
-                }
-            }
-        }
+	    steps {
+		dir('backend') {
+		    sh '''
+		        . ../venv/bin/activate
+		        export PYTHONPATH=$PYTHONPATH:..
+		        export MLFLOW_TRACKING_URI=file:///tmp/mlflow-tests
+		        export TESTING=true  # Set TESTING to true to skip MLflow during tests
+		        pytest tests/test_main.py -v
+		    '''
+		}
+	    }
+	}
         stage('Start MLflow Server') {
             steps {
                 dir('backend') {
