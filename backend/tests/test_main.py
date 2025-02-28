@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import MagicMock, patch
 from fastapi.testclient import TestClient
-from backend.main import app
+from backend.main import app, PREPARED_DATA_PATH, MODEL_PATH
 from model_pipeline.preprocessing import preprocess_data
 from model_pipeline.training import train_gbm
 from model_pipeline.evaluation import evaluate_model
@@ -32,10 +32,19 @@ predict_data = [
 def to_dataframe(data):
     return pd.DataFrame(data)
 
-
 # Create a mock model with a predict method
 mock_model = MagicMock()
 mock_model.predict.return_value = [True]  # Simulate prediction output
+
+
+# Helper function to determine what joblib.load should return based on the path
+def joblib_load_side_effect(path):
+    if path == PREPARED_DATA_PATH:
+        return (to_dataframe(train_data), to_dataframe(test_data))
+    elif path == MODEL_PATH:
+        return mock_model
+    else:
+        raise ValueError(f"Unexpected path in joblib.load: {path}")
 
 
 # Test /prepare_data endpoint
@@ -67,7 +76,7 @@ def test_train():
          patch("model_pipeline.training.train_gbm", return_value=mock_model) as mock_train, \
          patch("model_pipeline.io.save_model"), \
          patch("joblib.dump"), \
-         patch("joblib.load", return_value=(train_df, test_df)):
+         patch("joblib.load", side_effect=joblib_load_side_effect):
         client.post("/prepare_data", files={
             "train_file": ("churn-bigml-80.csv", b"mock_train_data", "text/csv"),
             "test_file": ("churn-bigml-20.csv", b"mock_test_data", "text/csv")
@@ -89,7 +98,7 @@ def test_evaluate():
          patch("model_pipeline.io.load_model", return_value=mock_model), \
          patch("model_pipeline.evaluation.evaluate_model", return_value={"accuracy": 0.95}) as mock_evaluate, \
          patch("joblib.dump"), \
-         patch("joblib.load", return_value=(train_df, test_df)):
+         patch("joblib.load", side_effect=joblib_load_side_effect):
         client.post("/prepare_data", files={
             "train_file": ("churn-bigml-80.csv", b"mock_train_data", "text/csv"),
             "test_file": ("churn-bigml-20.csv", b"mock_test_data", "text/csv")
@@ -114,7 +123,7 @@ def test_predict():
          patch("model_pipeline.io.load_model", return_value=mock_model), \
          patch("pandas.DataFrame.to_dict", return_value=[{"Churn": True}]) as mock_to_dict, \
          patch("joblib.dump"), \
-         patch("joblib.load", return_value=(train_df, test_df)):
+         patch("joblib.load", side_effect=joblib_load_side_effect):
         client.post("/prepare_data", files={
             "train_file": ("churn-bigml-80.csv", b"mock_train_data", "text/csv"),
             "test_file": ("churn-bigml-20.csv", b"mock_test_data", "text/csv")
@@ -138,7 +147,7 @@ def test_retrain():
          patch("model_pipeline.training.train_gbm", return_value=mock_model) as mock_train, \
          patch("model_pipeline.io.save_model"), \
          patch("joblib.dump"), \
-         patch("joblib.load", return_value=(train_df, test_df)):
+         patch("joblib.load", side_effect=joblib_load_side_effect):
         client.post("/prepare_data", files={
             "train_file": ("churn-bigml-80.csv", b"mock_train_data", "text/csv"),
             "test_file": ("churn-bigml-20.csv", b"mock_test_data", "text/csv")
