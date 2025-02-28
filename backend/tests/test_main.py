@@ -19,6 +19,7 @@ def mock_mlflow():
          patch("mlflow.sklearn.log_model", new=MagicMock()):
         yield mock_start_run
 
+
 # Static mock data for testing (small lists of dictionaries with only the selected features)
 train_data = [
     {"Total day minutes": 100, "International plan": "No", "Customer service calls": 1,
@@ -41,6 +42,7 @@ predict_data = [
 # Helper function to convert list of dictionaries to DataFrame
 def to_dataframe(data):
     return pd.DataFrame(data)
+
 
 # Test /prepare_data endpoint
 def test_prepare_data():

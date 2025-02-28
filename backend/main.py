@@ -265,6 +265,7 @@ def retrain():
         logging.error(f"Error in retraining: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error in retraining: {str(e)}")
 
+
 @app.post("/login")
 def login(data: dict):
     """
