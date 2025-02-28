@@ -9,28 +9,32 @@ import pandas as pd
 
 client = TestClient(app)
 
-# Static mock data for testing (small lists of dictionaries with correct column names)
+# Static mock data for testing (small lists of dictionaries with pre-encoded categorical columns)
 train_data = [
-    {"Total day minutes": 100, "International plan": "No", "Customer service calls": 1,
-     "Total intl minutes": 5, "Voice mail plan": "No", "Number vmail messages": 0, "Churn": False},
-    {"Total day minutes": 150, "International plan": "Yes", "Customer service calls": 2,
-     "Total intl minutes": 7, "Voice mail plan": "Yes", "Number vmail messages": 10, "Churn": True}
+    {"Total day minutes": 100, "International plan": 0, "Customer service calls": 1,
+     "Total intl minutes": 5, "Voice mail plan": 0, "Number vmail messages": 0, "Churn": False},
+    {"Total day minutes": 150, "International plan": 1, "Customer service calls": 2,
+     "Total intl minutes": 7, "Voice mail plan": 1, "Number vmail messages": 10, "Churn": True}
 ]
 
 test_data = [
-    {"Total day minutes": 80, "International plan": "No", "Customer service calls": 0,
-     "Total intl minutes": 4, "Voice mail plan": "No", "Number vmail messages": 0}
+    {"Total day minutes": 80, "International plan": 0, "Customer service calls": 0,
+     "Total intl minutes": 4, "Voice mail plan": 0, "Number vmail messages": 0}
 ]
 
 predict_data = [
-    {"Total day minutes": 90, "International plan": "No", "Customer service calls": 1,
-     "Total intl minutes": 6, "Voice mail plan": "No", "Number vmail messages": 0}
+    {"Total day minutes": 90, "International plan": 0, "Customer service calls": 1,
+     "Total intl minutes": 6, "Voice mail plan": 0, "Number vmail messages": 0}
 ]
 
 
 # Helper function to convert list of dictionaries to DataFrame
 def to_dataframe(data):
     return pd.DataFrame(data)
+
+# Create a mock model with a predict method
+mock_model = MagicMock()
+mock_model.predict.return_value = [True]  # Simulate prediction output
 
 
 # Test /prepare_data endpoint
@@ -50,7 +54,6 @@ def test_prepare_data():
     assert response.status_code == 200
     assert response.json()["status"] == "Data prepared successfully"
 
-
 # Test /train endpoint
 def test_train():
     # Prepare data first
@@ -59,7 +62,7 @@ def test_train():
 
     with patch("pandas.read_csv", side_effect=[train_df, test_df]), \
          patch("model_pipeline.preprocessing.preprocess_data", return_value=(train_df, test_df)), \
-         patch("model_pipeline.training.train_gbm", return_value=MagicMock()) as mock_train, \
+         patch("model_pipeline.training.train_gbm", return_value=mock_model) as mock_train, \
          patch("model_pipeline.io.save_model"), \
          patch("joblib.dump"), \
          patch("joblib.load", return_value=(train_df, test_df)):
@@ -79,9 +82,9 @@ def test_evaluate():
 
     with patch("pandas.read_csv", side_effect=[train_df, test_df, train_df, test_df]), \
          patch("model_pipeline.preprocessing.preprocess_data", return_value=(train_df, test_df)), \
-         patch("model_pipeline.training.train_gbm", return_value=MagicMock()) as mock_train, \
+         patch("model_pipeline.training.train_gbm", return_value=mock_model) as mock_train, \
          patch("model_pipeline.io.save_model"), \
-         patch("model_pipeline.io.load_model", return_value=MagicMock()), \
+         patch("model_pipeline.io.load_model", return_value=mock_model), \
          patch("model_pipeline.evaluation.evaluate_model", return_value={"accuracy": 0.95}) as mock_evaluate, \
          patch("joblib.dump"), \
          patch("joblib.load", return_value=(train_df, test_df)):
@@ -104,9 +107,9 @@ def test_predict():
 
     with patch("pandas.read_csv", side_effect=[train_df, test_df, predict_df]), \
          patch("model_pipeline.preprocessing.preprocess_data", side_effect=[(train_df, test_df), predict_df]), \
-         patch("model_pipeline.training.train_gbm", return_value=MagicMock()) as mock_train, \
+         patch("model_pipeline.training.train_gbm", return_value=mock_model) as mock_train, \
          patch("model_pipeline.io.save_model"), \
-         patch("model_pipeline.io.load_model", return_value=MagicMock()) as mock_load, \
+         patch("model_pipeline.io.load_model", return_value=mock_model), \
          patch("pandas.DataFrame.to_dict", return_value=[{"Churn": True}]) as mock_to_dict, \
          patch("joblib.dump"), \
          patch("joblib.load", return_value=(train_df, test_df)):
@@ -130,7 +133,7 @@ def test_retrain():
 
     with patch("pandas.read_csv", side_effect=[train_df, test_df]), \
          patch("model_pipeline.preprocessing.preprocess_data", return_value=(train_df, test_df)), \
-         patch("model_pipeline.training.train_gbm", return_value=MagicMock()) as mock_train, \
+         patch("model_pipeline.training.train_gbm", return_value=mock_model) as mock_train, \
          patch("model_pipeline.io.save_model"), \
          patch("joblib.dump"), \
          patch("joblib.load", return_value=(train_df, test_df)):
