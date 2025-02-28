@@ -9,7 +9,7 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                git branch: 'main',
+                git branch: 'master',  // Changed from 'main' to 'master'
                     credentialsId: 'ML_Pipeline',
                     url: 'https://github.com/essaidimaryem8/ML-Pipeline.git'
             }
