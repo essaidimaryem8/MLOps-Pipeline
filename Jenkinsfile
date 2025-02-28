@@ -35,18 +35,18 @@ pipeline {
             }
         }
         stage('Run Tests') {
-	    steps {
-		dir('backend') {
-		    sh '''
-		        . ../venv/bin/activate
-		        export PYTHONPATH=$PYTHONPATH:..
-		        export MLFLOW_TRACKING_URI=file:///tmp/mlflow-tests
-		        export TESTING=true  # Set TESTING to true to skip MLflow during tests
-		        pytest tests/test_main.py -v
-		    '''
-		}
-	    }
-	}
+            steps {
+                dir('backend') {
+                    sh '''
+                        . ../venv/bin/activate
+                        export PYTHONPATH=$PYTHONPATH:..
+                        export MLFLOW_TRACKING_URI=file:///tmp/mlflow-tests
+                        export TESTING=true  // Set TESTING to true to skip MLflow during tests
+                        pytest tests/test_main.py -v
+                    '''
+                }
+            }
+        }
         stage('Start MLflow Server') {
             steps {
                 dir('backend') {
@@ -62,18 +62,26 @@ pipeline {
         stage('Build Docker Images') {
             steps {
                 script {
-                    docker.build("${DOCKER_HUB_USERNAME}/ml-pipeline-backend:latest", './backend')
-                    docker.build("${DOCKER_HUB_USERNAME}/ml-pipeline-frontend:latest", './frontend')
+                    // Login to Docker Hub
+                    sh 'echo $DOCKER_HUB_PASSWORD_PSW | docker login -u $DOCKER_HUB_USERNAME --password-stdin'
+
+                    // Build backend image
+                    sh "docker build -t ${DOCKER_HUB_USERNAME}/ml-pipeline-backend:latest -f backend/Dockerfile ./backend"
+                    // Build frontend image
+                    sh "docker build -t ${DOCKER_HUB_USERNAME}/ml-pipeline-frontend:latest -f frontend/Dockerfile ./frontend"
                 }
             }
         }
         stage('Push Docker Images') {
             steps {
                 script {
-                    docker.withRegistry('https://index.docker.io/v1/', 'docker-hub-credentials') {
-                        docker.image("${DOCKER_HUB_USERNAME}/ml-pipeline-backend:latest").push()
-                        docker.image("${DOCKER_HUB_USERNAME}/ml-pipeline-frontend:latest").push()
-                    }
+                    // Ensure Docker Hub login
+                    sh 'echo $DOCKER_HUB_PASSWORD_PSW | docker login -u $DOCKER_HUB_USERNAME --password-stdin'
+
+                    // Push backend image
+                    sh "docker push ${DOCKER_HUB_USERNAME}/ml-pipeline-backend:latest"
+                    // Push frontend image
+                    sh "docker push ${DOCKER_HUB_USERNAME}/ml-pipeline-frontend:latest"
                 }
             }
         }
