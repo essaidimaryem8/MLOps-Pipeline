@@ -28,7 +28,7 @@ pipeline {
             steps {
                 sh '''
                     . venv/bin/activate
-                    pycodestyle backend/main.py backend/model_pipeline/preprocessing.py backend/model_pipeline/training.py backend/model_pipeline/evaluation.py backend/model_pipeline/io.py tests/test_main.py --max-line-length=120 --ignore=E203,E266,E501,W503
+                    pycodestyle backend/main.py backend/model_pipeline/preprocessing.py backend/model_pipeline/training.py backend/model_pipeline/evaluation.py backend/model_pipeline/io.py backend/tests/test_main.py --max-line-length=120 --ignore=E203,E266,E501,W503
                 '''
             }
         }
