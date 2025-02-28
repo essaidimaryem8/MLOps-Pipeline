@@ -37,6 +37,7 @@ pipeline {
                 dir('backend') {
                     sh '''
                         . ../venv/bin/activate
+                        export PYTHONPATH=$PYTHONPATH:..
                         pytest tests/test_main.py -v
                     '''
                 }
