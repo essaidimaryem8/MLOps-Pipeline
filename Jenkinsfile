@@ -1,18 +1,15 @@
 pipeline {
     agent any
     environment {
-        DOCKER_HUB_USERNAME = 'essaidimaryem'  // Your Docker Hub username
-        DOCKER_HUB_PASSWORD = credentials('DOCKER_CREDENTIALS')  // Jenkins credential ID
-        EMAIL_PASSWORD = credentials('gmail-app-password')  // Jenkins credential ID
-        SENDER_EMAIL = credentials('sender-email')  // Jenkins credential ID
-        RECIPIENT_EMAIL = credentials('recipient-email')  // Jenkins credential ID
+        DOCKER_HUB_USERNAME = 'essaidimaryem'
+        DOCKER_HUB_PASSWORD = credentials('DOCKER_CREDENTIALS')
         MLFLOW_TRACKING_URI = 'http://localhost:5000'
         JENKINS = 'true'
     }
     stages {
         stage('Checkout') {
             steps {
-                git branch: 'main', url: 'https://github.com/essaidimaryem/ML-Pipeline.git'
+                git branch: 'main', url: 'https://github.com/essaidimaryem8/ML-Pipeline.git'
             }
         }
         stage('Set Up Python') {
@@ -88,15 +85,21 @@ pipeline {
         }
         success {
             echo 'Pipeline completed successfully!'
-            mail to: "${RECIPIENT_EMAIL}",
-                 subject: "Pipeline Success: ML Pipeline",
-                 body: "The ML Pipeline job completed successfully on ${env.BUILD_URL}. Docker images are pushed to ${DOCKER_HUB_USERNAME}/ml-pipeline-backend:latest and ${DOCKER_HUB_USERNAME}/ml-pipeline-frontend:latest."
+            withCredentials([string(credentialsId: 'sender-email', variable: 'SENDER_EMAIL'),
+                             string(credentialsId: 'recipient-email', variable: 'RECIPIENT_EMAIL')]) {
+                mail to: "${RECIPIENT_EMAIL}",
+                     subject: "Pipeline Success: ML Pipeline",
+                     body: "The ML Pipeline job completed successfully on ${env.BUILD_URL}. Docker images are pushed to ${DOCKER_HUB_USERNAME}/ml-pipeline-backend:latest and ${DOCKER_HUB_USERNAME}/ml-pipeline-frontend:latest."
+            }
         }
         failure {
             echo 'Pipeline failed!'
-            mail to: "${RECIPIENT_EMAIL}",
-                 subject: "Pipeline Failure: ML Pipeline",
-                 body: "The ML Pipeline job failed on ${env.BUILD_URL}. Check logs for details."
+            withCredentials([string(credentialsId: 'sender-email', variable: 'SENDER_EMAIL'),
+                             string(credentialsId: 'recipient-email', variable: 'RECIPIENT_EMAIL')]) {
+                mail to: "${RECIPIENT_EMAIL}",
+                     subject: "Pipeline Failure: ML Pipeline",
+                     body: "The ML Pipeline job failed on ${env.BUILD_URL}. Check logs for details."
+            }
         }
     }
 }

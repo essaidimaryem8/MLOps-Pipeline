@@ -1,12 +1,12 @@
 services:
   backend:
-    image: essaidimaryem/ml-pipeline-backend:latest  # Pull from Docker Hub
+    image: essaidimaryem/ml-pipeline-backend:latest
     container_name: backend
     environment:
       - DOCKER=true
-      - EMAIL_PASSWORD=epcu lndl gwiy wole  # Replace with your Gmail App Password
+      - EMAIL_PASSWORD=epcu lndl gwiy wole
       - SENDER_EMAIL=maryemessaidi8@gmail.com
-      - RECIPIENT_EMAIL=Maryem.Essaidi@esprit.tn
+      - RECIPIENT_EMAIL=maryem.essaidi@esprit.tn
       - MLFLOW_TRACKING_URI=http://mlflow:5000
     ports:
       - "8000:8000"
@@ -20,7 +20,7 @@ services:
       - mlflow
 
   frontend:
-    image: essaidimaryem/ml-pipeline-frontend:latest  # Pull from Docker Hub
+    image: essaidimaryem/ml-pipeline-frontend:latest
     container_name: frontend
     environment:
       - BACKEND_URL=http://backend:8000
