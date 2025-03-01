@@ -86,16 +86,18 @@ pipeline {
             }
         }
         stage('Run Pipeline') {
-            steps {
-                sh 'docker-compose down'
-                sh 'docker-compose build backend mlflow elasticsearch kibana'
-                sh 'docker-compose up -d backend mlflow elasticsearch kibana'
-                // Wait for services to start
-                sh 'sleep 15'
-                sh 'docker exec backend python /app/main.py --prepare_data --train --evaluate --retrain'
-                sh 'mlflow experiments --experiment-name GBM_Experiment'  // Verify tracking
-            }
-        }
+	    steps {
+		sh 'docker-compose down'
+		sh 'docker-compose build backend mlflow elasticsearch kibana'
+		sh 'docker-compose up -d backend mlflow elasticsearch kibana'
+		// Wait for services to start
+		sh 'sleep 15'
+		// Remove existing mlflow.db to avoid UNIQUE constraint errors
+		sh 'docker exec backend rm -f /app/mlflow.db'
+		sh 'docker exec backend python /app/main.py --prepare_data --train --evaluate --retrain'
+		sh 'mlflow experiments --experiment-name GBM_Experiment'  // Verify tracking
+	    }
+	}
         stage('Deploy') {
             steps {
                 echo 'Deploying to production (simulated)'
