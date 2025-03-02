@@ -4,10 +4,10 @@ import os
 import smtplib
 from email.mime.text import MIMEText
 from fastapi import FastAPI, File, UploadFile, HTTPException
-from model_pipeline.preprocessing import preprocess_data
-from model_pipeline.training import train_gbm
-from model_pipeline.evaluation import evaluate_model
-from model_pipeline.io import save_model, load_model
+from backend.model_pipeline.preprocessing import preprocess_data
+from backend.model_pipeline.training import train_gbm
+from backend.model_pipeline.evaluation import evaluate_model
+from backend.model_pipeline.io import save_model, load_model
 import mlflow
 import mlflow.sklearn
 import pandas as pd
@@ -18,14 +18,14 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 
 app = FastAPI()
 
-# Define paths
-DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data")
-MODEL_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models")
-RAW_DATA_DIR = os.path.join(DATA_DIR, "raw_data")
-TRAIN_PATH = os.path.join(RAW_DATA_DIR, "churn-bigml-80.csv")
-TEST_PATH = os.path.join(RAW_DATA_DIR, "churn-bigml-20.csv")
-PREPARED_DATA_PATH = os.path.join(DATA_DIR, "prepared_data.joblib")
-MODEL_PATH = os.path.join(MODEL_DIR, "GBM_model.joblib")  # Ensure this is a file path
+# Define paths (absolute paths to match Docker volume mounts and test_main.py)
+DATA_DIR = "/app/data"
+MODEL_DIR = "/app/models"
+RAW_DATA_DIR = "/app/data/raw_data"
+TRAIN_PATH = "/app/data/raw_data/churn-bigml-80.csv"
+TEST_PATH = "/app/data/raw_data/churn-bigml-20.csv"
+PREPARED_DATA_PATH = "/app/data/prepared_data.joblib"
+MODEL_PATH = "/app/models/GBM_model.joblib"
 
 # Create directories if they don't exist
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -45,7 +45,6 @@ SELECTED_FEATURES = [
 # Check if running in test mode (to disable MLflow)
 IS_TESTING = os.getenv("TESTING", "false") == "true"
 
-
 # Use MLFLOW_TRACKING_URI environment variable if set, otherwise determine based on environment
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI")
 if not MLFLOW_TRACKING_URI:
@@ -58,16 +57,13 @@ if not MLFLOW_TRACKING_URI:
 
 mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
 
-
 # Only set up MLflow experiment if running the script directly and not in test mode
 if __name__ == "__main__" and not IS_TESTING:
     mlflow.set_experiment("GBM_Experiment")
 
-
 @app.get("/")
 def home():
     return {"message": "Backend API is running"}
-
 
 def send_email(subject, body, to_email):
     """Send an email notification with the given subject and body."""
@@ -94,7 +90,6 @@ def send_email(subject, body, to_email):
         logging.info(f"Email sent to {recipient_email} with subject: {subject}")
     except Exception as e:
         logging.error(f"Failed to send email: {str(e)}")
-
 
 @app.post("/prepare_data")
 async def prepare_data_endpoint(train_file: UploadFile = File(...), test_file: UploadFile = File(...)):
@@ -143,7 +138,6 @@ async def prepare_data_endpoint(train_file: UploadFile = File(...), test_file: U
         logging.error(f"Error in data preparation: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error in data preparation: {str(e)}")
 
-
 @app.post("/train")
 def train():
     """
@@ -183,7 +177,6 @@ def train():
     except Exception as e:
         logging.error(f"Error in training: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error in training: {str(e)}")
-
 
 @app.get("/evaluate")
 def evaluate():
@@ -226,7 +219,6 @@ def evaluate():
         logging.error(f"Evaluation error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Evaluation error: {str(e)}")
 
-
 @app.post("/predict")
 def predict(file: UploadFile = File(...)):
     """
@@ -261,7 +253,6 @@ def predict(file: UploadFile = File(...)):
     except Exception as e:
         logging.error(f"Prediction error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Prediction error: {str(e)}")
-
 
 @app.post("/retrain")
 def retrain():
@@ -303,7 +294,6 @@ def retrain():
         logging.error(f"Error in retraining: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error in retraining: {str(e)}")
 
-
 @app.post("/login")
 def login(data: dict):
     """
@@ -315,7 +305,6 @@ def login(data: dict):
         return {"status": "success", "message": "Login successful"}
     else:
         raise HTTPException(status_code=401, detail="Invalid credentials")
-
 
 def run_pipeline(args):
     """
@@ -442,7 +431,6 @@ def run_pipeline(args):
     except Exception as e:
         logging.error(f"Pipeline execution failed: {str(e)}")
         raise
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run parts of the ML pipeline or start FastAPI server.")
