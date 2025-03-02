@@ -161,7 +161,7 @@ def test_predict():
         assert response.status_code == 200
         response = client.post("/train")
         assert response.status_code == 200
-        
+
         # Predict request
         predict_file = ("predict.csv", predict_df.to_csv(index=False), "text/csv")
         response = client.post("/predict", files={"file": predict_file})
