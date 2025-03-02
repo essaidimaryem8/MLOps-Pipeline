@@ -7,8 +7,6 @@ from backend.model_pipeline.training import train_gbm
 from backend.model_pipeline.evaluation import evaluate_model
 import pandas as pd
 
-client = TestClient(app)
-
 # Static mock data for testing (small lists of dictionaries with pre-encoded categorical columns)
 train_data = [
     {"Total day minutes": 100, "International plan": 0, "Customer service calls": 1,
@@ -25,28 +23,28 @@ test_data = [
      "Total intl minutes": 5, "Voice mail plan": 0, "Number vmail messages": 0, "Churn": True}
 ]
 
+# Mock data for prediction
 predict_data = [
     {"Total day minutes": 90, "International plan": 0, "Customer service calls": 1,
      "Total intl minutes": 6, "Voice mail plan": 0, "Number vmail messages": 0}
 ]
 
 
-# Helper function to convert list of dictionaries to DataFrame
+# Convert list of dictionaries to DataFrame
 def to_dataframe(data):
     return pd.DataFrame(data)
 
 
-# Helper function to determine what joblib.load should return based on the path
-def joblib_load_side_effect(path, train_df, test_df, mock_model):
+# Helper function to mock joblib.load behavior
+def joblib_load_side_effect(path, train_df, test_df, model=None):
     if path == PREPARED_DATA_PATH:
         return (train_df, test_df)
     elif path == MODEL_PATH:
-        return mock_model
-    else:
-        raise ValueError(f"Unexpected path in joblib.load: {path}")
+        return model
+    raise FileNotFoundError(f"Unexpected path {path}")
 
 
-# Test /prepare_data endpoint
+# Test cases
 def test_prepare_data():
     # Convert static data to DataFrames
     train_df = to_dataframe(train_data)
@@ -54,17 +52,21 @@ def test_prepare_data():
 
     # Mock pd.read_csv and joblib.dump
     with patch("pandas.read_csv", side_effect=[train_df, test_df]), \
-         patch("model_pipeline.preprocessing.preprocess_data", return_value=(train_df, test_df)) as mock_preprocess, \
+         patch("backend.model_pipeline.preprocessing.preprocess_data", return_value=(train_df, test_df)) as mock_preprocess, \
          patch("joblib.dump") as mock_dump:
-        response = client.post("/prepare_data", files={
-            "train_file": ("churn-bigml-80.csv", b"mock_train_data", "text/csv"),
-            "test_file": ("churn-bigml-20.csv", b"mock_test_data", "text/csv")
-        })
-    assert response.status_code == 200
-    assert response.json()["status"] == "Data prepared successfully"
+        client = TestClient(app)
+        # Prepare multipart form-data for the request
+        files = {
+            "train_file": ("churn-bigml-80.csv", b"mock train data", "text/csv"),
+            "test_file": ("churn-bigml-20.csv", b"mock test data", "text/csv")
+        }
+        response = client.post("/prepare_data", files=files)
+        assert response.status_code == 200
+        assert response.json() == {"status": "Data prepared successfully"}
+        mock_preprocess.assert_called_once()
+        mock_dump.assert_called_once()
 
 
-# Test /train endpoint
 def test_train():
     # Convert static data to DataFrames
     train_df = to_dataframe(train_data)
@@ -74,54 +76,64 @@ def test_train():
     mock_model = MagicMock()
 
     with patch("pandas.read_csv", side_effect=[train_df, test_df]), \
-         patch("model_pipeline.preprocessing.preprocess_data", return_value=(train_df, test_df)), \
-         patch("model_pipeline.training.train_gbm", return_value=mock_model) as mock_train, \
-         patch("model_pipeline.io.save_model"), \
+         patch("backend.model_pipeline.preprocessing.preprocess_data", return_value=(train_df, test_df)), \
+         patch("backend.model_pipeline.training.train_gbm", return_value=mock_model) as mock_train, \
+         patch("backend.model_pipeline.io.save_model"), \
          patch("joblib.dump"), \
          patch("joblib.load", side_effect=lambda path: joblib_load_side_effect(path, train_df, test_df, mock_model)):
-        client.post("/prepare_data", files={
-            "train_file": ("churn-bigml-80.csv", b"mock_train_data", "text/csv"),
-            "test_file": ("churn-bigml-20.csv", b"mock_test_data", "text/csv")
-        })
+        client = TestClient(app)
+        # Prepare multipart form-data for the request
+        files = {
+            "train_file": ("churn-bigml-80.csv", b"mock train data", "text/csv"),
+            "test_file": ("churn-bigml-20.csv", b"mock test data", "text/csv")
+        }
+        response = client.post("/prepare_data", files=files)
+        assert response.status_code == 200
         response = client.post("/train")
-    assert response.status_code == 200
-    assert response.json()["status"] == "Model trained successfully"
+        assert response.status_code == 200
+        assert response.json() == {"status": "Model trained successfully"}
+        mock_train.assert_called_once()
 
 
-# Test /evaluate endpoint
-@pytest.mark.skip(reason="Skipping test_evaluate due to persistent recursion error; to be fixed later")
+@pytest.mark.skip("Skipping test_evaluate due to recursion error")
 def test_evaluate():
+    # Convert static data to DataFrames
     train_df = to_dataframe(train_data)
     test_df = to_dataframe(test_data)
 
-    # Ensure preprocess_data returns consistent sample sizes for X_test and y_test
-    eval_test_df = to_dataframe(test_data)  # Same as test_df, used for evaluation
-
-    # Create a fresh mock model for this test
+    # Create a mock model for this test
     mock_model = MagicMock()
-    mock_model.predict.return_value = [True, False]  # Matches the 2 samples in test_df
+    mock_model.predict.return_value = [False, True]  # Matches the 2 samples in test_df
 
-    # Mock evaluate_model to avoid calling the real function and causing recursion
-    with patch("pandas.read_csv", side_effect=[train_df, test_df, test_df]), \
-         patch("model_pipeline.preprocessing.preprocess_data", side_effect=[(train_df, test_df), (None, eval_test_df)]), \
-         patch("model_pipeline.training.train_gbm", return_value=mock_model) as mock_train, \
-         patch("model_pipeline.io.save_model"), \
-         patch("model_pipeline.io.load_model", return_value=mock_model), \
-         patch("model_pipeline.evaluation.evaluate_model", return_value={"accuracy": 0.95, "roc_auc": 0.9, "classification_report": {}}) as mock_evaluate, \
+    with patch("pandas.read_csv", side_effect=[train_df, test_df]), \
+         patch("backend.model_pipeline.preprocessing.preprocess_data", return_value=(train_df, test_df)), \
+         patch("backend.model_pipeline.training.train_gbm", return_value=mock_model), \
+         patch("backend.model_pipeline.evaluation.evaluate_model", return_value={
+             "accuracy": 0.95,
+             "roc_auc": 0.92,
+             "classification_report": "Mock classification report"
+         }) as mock_evaluate, \
+         patch("backend.model_pipeline.io.save_model"), \
+         patch("backend.model_pipeline.io.load_model", return_value=mock_model), \
          patch("joblib.dump"), \
          patch("joblib.load", side_effect=lambda path: joblib_load_side_effect(path, train_df, test_df, mock_model)):
-        client.post("/prepare_data", files={
-            "train_file": ("churn-bigml-80.csv", b"mock_train_data", "text/csv"),
-            "test_file": ("churn-bigml-20.csv", b"mock_test_data", "text/csv")
-        })
-        client.post("/train")
+        client = TestClient(app)
+        # Prepare multipart form-data for the request
+        files = {
+            "train_file": ("churn-bigml-80.csv", b"mock train data", "text/csv"),
+            "test_file": ("churn-bigml-20.csv", b"mock test data", "text/csv")
+        }
+        response = client.post("/prepare_data", files=files)
+        assert response.status_code == 200
+        response = client.post("/train")
+        assert response.status_code == 200
         response = client.get("/evaluate")
-    assert response.status_code == 200
-    assert "accuracy" in response.json()
-    assert 0 <= response.json()["accuracy"] <= 1
+        assert response.status_code == 200
+        assert "accuracy" in response.json()
+        assert "roc_auc" in response.json()
+        mock_evaluate.assert_called_once()
 
 
-# Test /predict endpoint
 def test_predict():
     train_df = to_dataframe(train_data)
     test_df = to_dataframe(test_data)
@@ -132,27 +144,32 @@ def test_predict():
     mock_model.predict.return_value = [True]  # Matches the 1 sample in predict_df
 
     with patch("pandas.read_csv", side_effect=[train_df, test_df, predict_df]), \
-         patch("model_pipeline.preprocessing.preprocess_data", side_effect=[(train_df, test_df), predict_df]), \
-         patch("model_pipeline.training.train_gbm", return_value=mock_model) as mock_train, \
-         patch("model_pipeline.io.save_model"), \
-         patch("model_pipeline.io.load_model", return_value=mock_model), \
+         patch("backend.model_pipeline.preprocessing.preprocess_data", side_effect=[(train_df, test_df), predict_df]), \
+         patch("backend.model_pipeline.training.train_gbm", return_value=mock_model) as mock_train, \
+         patch("backend.model_pipeline.io.save_model"), \
+         patch("backend.model_pipeline.io.load_model", return_value=mock_model), \
          patch("pandas.DataFrame.to_dict", return_value=[{"Churn": True}]) as mock_to_dict, \
          patch("joblib.dump"), \
          patch("joblib.load", side_effect=lambda path: joblib_load_side_effect(path, train_df, test_df, mock_model)):
-        client.post("/prepare_data", files={
-            "train_file": ("churn-bigml-80.csv", b"mock_train_data", "text/csv"),
-            "test_file": ("churn-bigml-20.csv", b"mock_test_data", "text/csv")
-        })
-        client.post("/train")
-        response = client.post("/predict", files={
-            "file": ("prediction.csv", b"mock_predict_data", "text/csv")
-        })
-    assert response.status_code == 200
-    assert "predictions" in response.json()
-    assert response.json()["predictions"] == [{"Churn": True}]
+        client = TestClient(app)
+        # Prepare multipart form-data for the request
+        files = {
+            "train_file": ("churn-bigml-80.csv", b"mock train data", "text/csv"),
+            "test_file": ("churn-bigml-20.csv", b"mock test data", "text/csv")
+        }
+        response = client.post("/prepare_data", files=files)
+        assert response.status_code == 200
+        response = client.post("/train")
+        assert response.status_code == 200
+        
+        # Predict request
+        predict_file = ("predict.csv", predict_df.to_csv(index=False), "text/csv")
+        response = client.post("/predict", files={"file": predict_file})
+        assert response.status_code == 200
+        assert response.json() == {"predictions": [{"Churn": True}]}
+        mock_to_dict.assert_called_once()
 
 
-# Test /retrain endpoint
 def test_retrain():
     train_df = to_dataframe(train_data)
     test_df = to_dataframe(test_data)
@@ -161,27 +178,33 @@ def test_retrain():
     mock_model = MagicMock()
 
     with patch("pandas.read_csv", side_effect=[train_df, test_df]), \
-         patch("model_pipeline.preprocessing.preprocess_data", return_value=(train_df, test_df)), \
-         patch("model_pipeline.training.train_gbm", return_value=mock_model) as mock_train, \
-         patch("model_pipeline.io.save_model"), \
+         patch("backend.model_pipeline.preprocessing.preprocess_data", return_value=(train_df, test_df)), \
+         patch("backend.model_pipeline.training.train_gbm", return_value=mock_model) as mock_train, \
+         patch("backend.model_pipeline.io.save_model"), \
          patch("joblib.dump"), \
          patch("joblib.load", side_effect=lambda path: joblib_load_side_effect(path, train_df, test_df, mock_model)):
-        client.post("/prepare_data", files={
-            "train_file": ("churn-bigml-80.csv", b"mock_train_data", "text/csv"),
-            "test_file": ("churn-bigml-20.csv", b"mock_test_data", "text/csv")
-        })
-        client.post("/train")
+        client = TestClient(app)
+        # Prepare multipart form-data for the request
+        files = {
+            "train_file": ("churn-bigml-80.csv", b"mock train data", "text/csv"),
+            "test_file": ("churn-bigml-20.csv", b"mock test data", "text/csv")
+        }
+        response = client.post("/prepare_data", files=files)
+        assert response.status_code == 200
         response = client.post("/retrain")
-    assert response.status_code == 200
-    assert response.json()["status"] == "Model retrained successfully"
+        assert response.status_code == 200
+        assert response.json() == {"status": "Model retrained successfully"}
+        mock_train.assert_called_once()
 
 
-# Test /login endpoint
 def test_login():
+    client = TestClient(app)
+    # Test successful login
     response = client.post("/login", json={"username": "admin", "password": "password123"})
     assert response.status_code == 200
-    assert response.json()["status"] == "success"
+    assert response.json() == {"status": "success", "message": "Login successful"}
 
+    # Test failed login
     response = client.post("/login", json={"username": "wrong", "password": "wrong"})
     assert response.status_code == 401
     assert response.json()["detail"] == "Invalid credentials"
