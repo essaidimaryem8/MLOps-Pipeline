@@ -50,10 +50,12 @@ def test_prepare_data():
     train_df = to_dataframe(train_data)
     test_df = to_dataframe(test_data)
 
-    # Mock pd.read_csv and joblib.dump
-    with patch("pandas.read_csv", side_effect=[train_df, test_df]), \
+    # Mock pd.read_csv, joblib.dump, os.makedirs, and logging.error
+    with patch("pandas.read_csv", side_effect=[train_df, test_df]) as mock_read_csv, \
          patch("backend.model_pipeline.preprocessing.preprocess_data", return_value=(train_df, test_df)) as mock_preprocess, \
-         patch("joblib.dump") as mock_dump:
+         patch("joblib.dump") as mock_dump, \
+         patch("os.makedirs") as mock_makedirs, \
+         patch("logging.error") as mock_log_error:
         client = TestClient(app)
         # Prepare multipart form-data for the request
         files = {
@@ -61,10 +63,16 @@ def test_prepare_data():
             "test_file": ("churn-bigml-20.csv", b"mock test data", "text/csv")
         }
         response = client.post("/prepare_data", files=files)
-        assert response.status_code == 200
+        print(f"Response status: {response.status_code}, Response json: {response.json()}")
+        print(f"Logging error calls: {mock_log_error.call_args_list}")
+        assert response.status_code == 200, f"Expected status 200, got {response.status_code}: {response.json()}"
         assert response.json() == {"status": "Data prepared successfully"}
+        mock_read_csv.assert_called()
+        mock_makedirs.assert_called()
         mock_preprocess.assert_called_once()
         mock_dump.assert_called_once()
+        if mock_preprocess.call_count == 0:
+            print(f"Logging error calls: {mock_log_error.call_args_list}")
 
 
 def test_train():
@@ -78,9 +86,10 @@ def test_train():
     with patch("pandas.read_csv", side_effect=[train_df, test_df]), \
          patch("backend.model_pipeline.preprocessing.preprocess_data", return_value=(train_df, test_df)), \
          patch("backend.model_pipeline.training.train_gbm", return_value=mock_model) as mock_train, \
-         patch("backend.model_pipeline.io.save_model"), \
-         patch("joblib.dump"), \
-         patch("joblib.load", side_effect=lambda path: joblib_load_side_effect(path, train_df, test_df, mock_model)):
+         patch("backend.model_pipeline.io.save_model") as mock_save_model, \
+         patch("joblib.dump") as mock_dump, \
+         patch("joblib.load", side_effect=lambda path: joblib_load_side_effect(path, train_df, test_df, mock_model)), \
+         patch("os.path.exists", side_effect=lambda path: True if path == PREPARED_DATA_PATH else os.path.exists(path)):
         client = TestClient(app)
         # Prepare multipart form-data for the request
         files = {
@@ -88,11 +97,12 @@ def test_train():
             "test_file": ("churn-bigml-20.csv", b"mock test data", "text/csv")
         }
         response = client.post("/prepare_data", files=files)
-        assert response.status_code == 200
+        assert response.status_code == 200, f"Prepare data failed: {response.json()}"
         response = client.post("/train")
-        assert response.status_code == 200
+        assert response.status_code == 200, f"Train failed: {response.json()}"
         assert response.json() == {"status": "Model trained successfully"}
         mock_train.assert_called_once()
+        mock_save_model.assert_called_once()
 
 
 @pytest.mark.skip("Skipping test_evaluate due to recursion error")
@@ -144,13 +154,14 @@ def test_predict():
     mock_model.predict.return_value = [True]  # Matches the 1 sample in predict_df
 
     with patch("pandas.read_csv", side_effect=[train_df, test_df, predict_df]), \
-         patch("backend.model_pipeline.preprocessing.preprocess_data", side_effect=[(train_df, test_df), predict_df]), \
+         patch("backend.model_pipeline.preprocessing.preprocess_data", side_effect=[(train_df, test_df), predict_df]) as mock_preprocess, \
          patch("backend.model_pipeline.training.train_gbm", return_value=mock_model) as mock_train, \
-         patch("backend.model_pipeline.io.save_model"), \
+         patch("backend.model_pipeline.io.save_model") as mock_save_model, \
          patch("backend.model_pipeline.io.load_model", return_value=mock_model), \
          patch("pandas.DataFrame.to_dict", return_value=[{"Churn": True}]) as mock_to_dict, \
-         patch("joblib.dump"), \
-         patch("joblib.load", side_effect=lambda path: joblib_load_side_effect(path, train_df, test_df, mock_model)):
+         patch("joblib.dump") as mock_dump, \
+         patch("joblib.load", side_effect=lambda path: joblib_load_side_effect(path, train_df, test_df, mock_model)), \
+         patch("os.path.exists", side_effect=lambda path: True if path in (PREPARED_DATA_PATH, MODEL_PATH) else os.path.exists(path)):
         client = TestClient(app)
         # Prepare multipart form-data for the request
         files = {
@@ -158,15 +169,19 @@ def test_predict():
             "test_file": ("churn-bigml-20.csv", b"mock test data", "text/csv")
         }
         response = client.post("/prepare_data", files=files)
-        assert response.status_code == 200
+        assert response.status_code == 200, f"Prepare data failed: {response.json()}"
         response = client.post("/train")
-        assert response.status_code == 200
-
+        assert response.status_code == 200, f"Train failed: {response.json()}"
+        
         # Predict request
         predict_file = ("predict.csv", predict_df.to_csv(index=False), "text/csv")
         response = client.post("/predict", files={"file": predict_file})
-        assert response.status_code == 200
+        assert response.status_code == 200, f"Predict failed: {response.json()}"
         assert response.json() == {"predictions": [{"Churn": True}]}
+        mock_preprocess.assert_called()  # Called twice: once in /prepare_data, once in /predict
+        assert mock_preprocess.call_count == 2, f"Expected preprocess_data to be called twice, but was called {mock_preprocess.call_count} times"
+        mock_train.assert_called_once()
+        mock_save_model.assert_called_once()
         mock_to_dict.assert_called_once()
 
 
@@ -180,9 +195,10 @@ def test_retrain():
     with patch("pandas.read_csv", side_effect=[train_df, test_df]), \
          patch("backend.model_pipeline.preprocessing.preprocess_data", return_value=(train_df, test_df)), \
          patch("backend.model_pipeline.training.train_gbm", return_value=mock_model) as mock_train, \
-         patch("backend.model_pipeline.io.save_model"), \
-         patch("joblib.dump"), \
-         patch("joblib.load", side_effect=lambda path: joblib_load_side_effect(path, train_df, test_df, mock_model)):
+         patch("backend.model_pipeline.io.save_model") as mock_save_model, \
+         patch("joblib.dump") as mock_dump, \
+         patch("joblib.load", side_effect=lambda path: joblib_load_side_effect(path, train_df, test_df, mock_model)), \
+         patch("os.path.exists", side_effect=lambda path: True if path == PREPARED_DATA_PATH else os.path.exists(path)):
         client = TestClient(app)
         # Prepare multipart form-data for the request
         files = {
@@ -190,11 +206,12 @@ def test_retrain():
             "test_file": ("churn-bigml-20.csv", b"mock test data", "text/csv")
         }
         response = client.post("/prepare_data", files=files)
-        assert response.status_code == 200
+        assert response.status_code == 200, f"Prepare data failed: {response.json()}"
         response = client.post("/retrain")
-        assert response.status_code == 200
+        assert response.status_code == 200, f"Retrain failed: {response.json()}"
         assert response.json() == {"status": "Model retrained successfully"}
         mock_train.assert_called_once()
+        mock_save_model.assert_called_once()
 
 
 def test_login():
