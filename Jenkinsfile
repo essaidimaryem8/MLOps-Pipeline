@@ -35,27 +35,26 @@ pipeline {
             }
         }
         stage('Run Tests') {
-	    steps {
-		dir('backend') {
-		    sh '''
-		        . ../venv/bin/activate
-		        export PYTHONPATH=$PYTHONPATH:..
-		        export MLFLOW_TRACKING_URI=file:///tmp/mlflow-tests
-		        export TESTING=true # Set TESTING to true to skip MLflow during tests
-		        pytest tests/test_main.py -v
-		    '''
-		}
-	    }
-	}
+            steps {
+                dir('backend') {
+                    sh '''
+                        . ../venv/bin/activate
+                        export PYTHONPATH=$PYTHONPATH:..
+                        export MLFLOW_TRACKING_URI=file:///tmp/mlflow-tests
+                        export TESTING=true # Set TESTING to true to skip MLflow during tests
+                        pytest tests/test_main.py -v
+                    '''
+                }
+            }
+        }
         stage('Start MLflow Server') {
             steps {
                 dir('backend') {
                     sh '''
                         . ../venv/bin/activate
                         nohup mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow.db --default-artifact-root ./mlruns &
+                        sleep 15
                     '''
-                    // Wait for server to start
-                    sh 'sleep 15'
                 }
             }
         }
@@ -86,18 +85,30 @@ pipeline {
             }
         }
         stage('Run Pipeline') {
-	    steps {
-		sh 'docker-compose down'
-		sh 'docker-compose build backend mlflow elasticsearch kibana'
-		sh 'docker-compose up -d backend mlflow elasticsearch kibana'
-		// Wait for services to start
-		sh 'sleep 15'
-		// Remove existing mlflow.db to avoid UNIQUE constraint errors
-		sh 'docker exec backend rm -f /app/mlflow.db'
-		sh 'docker exec backend python /app/main.py --prepare_data --train --evaluate --retrain'
-		sh 'mlflow experiments --experiment-name GBM_Experiment'  // Verify tracking
-	    }
-	}
+            steps {
+                sh 'docker-compose down'
+                sh 'docker-compose build backend mlflow elasticsearch kibana'
+                sh 'docker-compose up -d backend mlflow elasticsearch kibana'
+                // Wait for services to start
+                sh 'sleep 15'
+                // Remove existing mlflow.db to avoid UNIQUE constraint errors
+                sh 'docker exec backend rm -f /app/mlflow.db'
+                // Run pipeline steps sequentially with logging
+                sh '''
+                    docker exec backend bash -c "export MLFLOW_TRACKING_URI=http://mlflow:5000 && export PYTHONPATH=/app && python /app/main.py --prepare_data 2>&1 | tee /app/prepare_data.log"
+                '''
+                sh '''
+                    docker exec backend bash -c "export MLFLOW_TRACKING_URI=http://mlflow:5000 && export PYTHONPATH=/app && python /app/main.py --train 2>&1 | tee /app/train.log"
+                '''
+                sh '''
+                    docker exec backend bash -c "export MLFLOW_TRACKING_URI=http://mlflow:5000 && export PYTHONPATH=/app && python /app/main.py --evaluate 2>&1 | tee /app/evaluate.log"
+                '''
+                sh '''
+                    docker exec backend bash -c "export MLFLOW_TRACKING_URI=http://mlflow:5000 && export PYTHONPATH=/app && python /app/main.py --retrain 2>&1 | tee /app/retrain.log"
+                '''
+                sh 'mlflow experiments --experiment-name GBM_Experiment'  // Verify tracking
+            }
+        }
         stage('Deploy') {
             steps {
                 echo 'Deploying to production (simulated)'
