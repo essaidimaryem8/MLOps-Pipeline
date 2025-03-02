@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, mock_open
 from fastapi.testclient import TestClient
 from backend.main import app, PREPARED_DATA_PATH, MODEL_PATH, TEST_PATH
 from backend.model_pipeline.preprocessing import preprocess_data
