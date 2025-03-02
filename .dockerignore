@@ -12,5 +12,6 @@ venv/
 mlruns/
 data/prepared_data.joblib
 models/GBM_model.joblib
-frontend/
+frontend/*.py
+frontend/Dockerfile
 tests/

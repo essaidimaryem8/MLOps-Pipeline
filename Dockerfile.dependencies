@@ -1,0 +1,26 @@
+# Use an official Python runtime as the base image
+FROM python:3.11-slim
+
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies (required for some Python packages)
+RUN apt-get update && apt-get install -y \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements files
+COPY backend/requirements.txt /app/backend_requirements.txt
+COPY frontend/requirements.txt /app/frontend_requirements.txt
+
+# Install Python dependencies
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir setuptools python-multipart && \
+    pip install --no-cache-dir -r backend_requirements.txt && \
+    pip install --no-cache-dir -r frontend_requirements.txt
+
+# Clean up to reduce image size
+RUN rm backend_requirements.txt frontend_requirements.txt
+
+# Define the command (optional, since this image will be used as a base)
+CMD ["python"]

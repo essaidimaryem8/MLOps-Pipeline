@@ -16,33 +16,33 @@ pipeline {
         }
         stage('Set Up Python') {
             steps {
-                sh 'python3 -m venv venv'
-                sh '''
-                    . venv/bin/activate
-                    python3 -m pip install --upgrade pip
-                    python3 -m pip install setuptools
-                    python3 -m pip install python-multipart
-                    python3 -m pip install -r backend/requirements.txt -r frontend/requirements.txt
-                '''
+                // No need to set up a virtual environment; dependencies are in the Docker image
+                echo "Using essaidimaryem/ml-project image with preinstalled dependencies"
             }
         }
         stage('Code Quality') {
             steps {
+                // Run pycodestyle inside a container using essaidimaryem/ml-project
                 sh '''
-                    . venv/bin/activate
-                    pycodestyle backend/main.py backend/model_pipeline/preprocessing.py backend/model_pipeline/training.py backend/model_pipeline/evaluation.py backend/model_pipeline/io.py backend/tests/test_main.py --max-line-length=120 --ignore=E203,E266,E501,W503
+                    docker run --rm \
+                        -v $(pwd)/backend:/app/backend \
+                        essaidimaryem/ml-project:latest \
+                        pycodestyle backend/main.py backend/model_pipeline/preprocessing.py backend/model_pipeline/training.py backend/model_pipeline/evaluation.py backend/model_pipeline/io.py backend/tests/test_main.py --max-line-length=120 --ignore=E203,E266,E501,W503
                 '''
             }
         }
         stage('Run Tests') {
             steps {
                 dir('backend') {
+                    // Run pytest inside a container using essaidimaryem/ml-project
                     sh '''
-                        . ../venv/bin/activate
-                        export PYTHONPATH=$PYTHONPATH:..
-                        export MLFLOW_TRACKING_URI=file:///tmp/mlflow-tests
-                        export TESTING=true # Set TESTING to true to skip MLflow during tests
-                        pytest tests/test_main.py -v
+                        docker run --rm \
+                            -v $(pwd):/app \
+                            -e PYTHONPATH=/app:.. \
+                            -e MLFLOW_TRACKING_URI=file:///tmp/mlflow-tests \
+                            -e TESTING=true \
+                            essaidimaryem/ml-project:latest \
+                            pytest tests/test_main.py -v
                     '''
                 }
             }
@@ -50,11 +50,18 @@ pipeline {
         stage('Start MLflow Server') {
             steps {
                 dir('backend') {
+                    // Start MLflow server inside a container using essaidimaryem/ml-project
                     sh '''
-                        . ../venv/bin/activate
-                        nohup mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow.db --default-artifact-root ./mlruns &
-                        sleep 15
+                        docker run -d \
+                            --name mlflow-server \
+                            -p 5000:5000 \
+                            -v $(pwd)/mlruns:/mlruns \
+                            -v $(pwd)/mlflow.db:/mlflow.db \
+                            essaidimaryem/ml-project:latest \
+                            mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow.db --default-artifact-root /mlruns
                     '''
+                    // Wait for server to start
+                    sh 'sleep 15'
                 }
             }
         }
@@ -64,9 +71,9 @@ pipeline {
                     // Login to Docker Hub
                     sh 'echo $DOCKER_HUB_PASSWORD_PSW | docker login -u $DOCKER_HUB_USERNAME --password-stdin'
 
-                    // Build backend image
+                    // Build backend image (already using essaidimaryem/ml-project as base)
                     sh "docker build -t ${DOCKER_HUB_USERNAME}/ml-pipeline-backend:latest -f backend/Dockerfile ./backend"
-                    // Build frontend image
+                    // Build frontend image (already using essaidimaryem/ml-project as base)
                     sh "docker build -t ${DOCKER_HUB_USERNAME}/ml-pipeline-frontend:latest -f frontend/Dockerfile ./frontend"
                 }
             }
@@ -106,7 +113,14 @@ pipeline {
                 sh '''
                     docker exec backend bash -c "export MLFLOW_TRACKING_URI=http://mlflow:5000 && export PYTHONPATH=/app && python /app/main.py --retrain 2>&1 | tee /app/retrain.log"
                 '''
-                sh 'mlflow experiments --experiment-name GBM_Experiment'  // Verify tracking
+                // Verify tracking by checking if GBM_Experiment exists
+                sh '''
+                    docker run --rm \
+                        -v $(pwd)/backend/mlruns:/mlruns \
+                        -e MLFLOW_TRACKING_URI=http://localhost:5000 \
+                        essaidimaryem/ml-project:latest \
+                        mlflow experiments list --view-type all | grep GBM_Experiment
+                '''
             }
         }
         stage('Deploy') {
