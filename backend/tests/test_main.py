@@ -5,6 +5,7 @@ from backend.main import app
 # Setup the FastAPI test client
 client = TestClient(app)
 
+
 def test_login():
     # Test successful login
     response = client.post("/login", json={"username": "admin", "password": "password123"})
