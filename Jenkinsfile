@@ -25,7 +25,7 @@ pipeline {
                 // Run pycodestyle inside a container using essaidimaryem/ml-project
                 sh '''
                     docker run --rm \
-                        -v $(pwd)/backend:/app/backend \
+                        -v $(pwd)/backend:/app \
                         essaidimaryem/ml-project:latest \
                         pycodestyle backend/main.py backend/model_pipeline/preprocessing.py backend/model_pipeline/training.py backend/model_pipeline/evaluation.py backend/model_pipeline/io.py backend/tests/test_main.py --max-line-length=120 --ignore=E203,E266,E501,W503
                 '''
@@ -37,10 +37,11 @@ pipeline {
                     // Run pytest inside a container using essaidimaryem/ml-project
                     sh '''
                         docker run --rm \
-                            -v $(pwd):/app \
-                            -e PYTHONPATH=/app:.. \
+                            -v $(pwd)/..:/app \
+                            -e PYTHONPATH=/app \
                             -e MLFLOW_TRACKING_URI=file:///tmp/mlflow-tests \
                             -e TESTING=true \
+                            -w /app/backend \
                             essaidimaryem/ml-project:latest \
                             pytest tests/test_main.py -v
                     '''
@@ -55,10 +56,10 @@ pipeline {
                         docker run -d \
                             --name mlflow-server \
                             -p 5000:5000 \
-                            -v $(pwd)/mlruns:/mlruns \
-                            -v $(pwd)/mlflow.db:/mlflow.db \
+                            -v $(pwd)/..:/app \
+                            -e PYTHONPATH=/app \
                             essaidimaryem/ml-project:latest \
-                            mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow.db --default-artifact-root /mlruns
+                            mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///app/backend/mlflow.db --default-artifact-root /app/backend/mlruns
                     '''
                     // Wait for server to start
                     sh 'sleep 15'
