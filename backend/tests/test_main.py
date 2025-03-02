@@ -2,9 +2,9 @@ import pytest
 from unittest.mock import MagicMock, patch
 from fastapi.testclient import TestClient
 from backend.main import app, PREPARED_DATA_PATH, MODEL_PATH, TEST_PATH
-from model_pipeline.preprocessing import preprocess_data
-from model_pipeline.training import train_gbm
-from model_pipeline.evaluation import evaluate_model
+from backend.model_pipeline.preprocessing import preprocess_data
+from backend.model_pipeline.training import train_gbm
+from backend.model_pipeline.evaluation import evaluate_model
 import pandas as pd
 
 client = TestClient(app)
