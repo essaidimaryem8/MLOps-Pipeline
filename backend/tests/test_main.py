@@ -50,12 +50,13 @@ def test_prepare_data():
     train_df = to_dataframe(train_data)
     test_df = to_dataframe(test_data)
 
-    # Mock pd.read_csv, joblib.dump, os.makedirs, and logging.error
+    # Mock pd.read_csv, joblib.dump, os.makedirs, logging.error, and file writing
     with patch("pandas.read_csv", side_effect=[train_df, test_df]) as mock_read_csv, \
          patch("backend.model_pipeline.preprocessing.preprocess_data", return_value=(train_df, test_df)) as mock_preprocess, \
          patch("joblib.dump") as mock_dump, \
          patch("os.makedirs") as mock_makedirs, \
-         patch("logging.error") as mock_log_error:
+         patch("logging.error") as mock_log_error, \
+         patch("builtins.open", new_callable=mock_open) as mock_file:
         client = TestClient(app)
         # Prepare multipart form-data for the request
         files = {
@@ -69,6 +70,7 @@ def test_prepare_data():
         assert response.json() == {"status": "Data prepared successfully"}
         mock_read_csv.assert_called()
         mock_makedirs.assert_called()
+        mock_file.assert_called()  # Ensure file writing was attempted
         mock_preprocess.assert_called_once()
         mock_dump.assert_called_once()
         if mock_preprocess.call_count == 0:
@@ -89,7 +91,8 @@ def test_train():
          patch("backend.model_pipeline.io.save_model") as mock_save_model, \
          patch("joblib.dump") as mock_dump, \
          patch("joblib.load", side_effect=lambda path: joblib_load_side_effect(path, train_df, test_df, mock_model)), \
-         patch("os.path.exists", side_effect=lambda path: True if path == PREPARED_DATA_PATH else os.path.exists(path)):
+         patch("os.path.exists", side_effect=lambda path: True if path == PREPARED_DATA_PATH else os.path.exists(path)), \
+         patch("builtins.open", new_callable=mock_open):
         client = TestClient(app)
         # Prepare multipart form-data for the request
         files = {
@@ -161,7 +164,8 @@ def test_predict():
          patch("pandas.DataFrame.to_dict", return_value=[{"Churn": True}]) as mock_to_dict, \
          patch("joblib.dump") as mock_dump, \
          patch("joblib.load", side_effect=lambda path: joblib_load_side_effect(path, train_df, test_df, mock_model)), \
-         patch("os.path.exists", side_effect=lambda path: True if path in (PREPARED_DATA_PATH, MODEL_PATH) else os.path.exists(path)):
+         patch("os.path.exists", side_effect=lambda path: True if path in (PREPARED_DATA_PATH, MODEL_PATH) else os.path.exists(path)), \
+         patch("builtins.open", new_callable=mock_open):
         client = TestClient(app)
         # Prepare multipart form-data for the request
         files = {
@@ -172,7 +176,7 @@ def test_predict():
         assert response.status_code == 200, f"Prepare data failed: {response.json()}"
         response = client.post("/train")
         assert response.status_code == 200, f"Train failed: {response.json()}"
-
+        
         # Predict request
         predict_file = ("predict.csv", predict_df.to_csv(index=False), "text/csv")
         response = client.post("/predict", files={"file": predict_file})
@@ -198,7 +202,8 @@ def test_retrain():
          patch("backend.model_pipeline.io.save_model") as mock_save_model, \
          patch("joblib.dump") as mock_dump, \
          patch("joblib.load", side_effect=lambda path: joblib_load_side_effect(path, train_df, test_df, mock_model)), \
-         patch("os.path.exists", side_effect=lambda path: True if path == PREPARED_DATA_PATH else os.path.exists(path)):
+         patch("os.path.exists", side_effect=lambda path: True if path == PREPARED_DATA_PATH else os.path.exists(path)), \
+         patch("builtins.open", new_callable=mock_open):
         client = TestClient(app)
         # Prepare multipart form-data for the request
         files = {
