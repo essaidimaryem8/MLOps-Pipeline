@@ -176,7 +176,7 @@ def test_predict():
         assert response.status_code == 200, f"Prepare data failed: {response.json()}"
         response = client.post("/train")
         assert response.status_code == 200, f"Train failed: {response.json()}"
-        
+ 
         # Predict request
         predict_file = ("predict.csv", predict_df.to_csv(index=False), "text/csv")
         response = client.post("/predict", files={"file": predict_file})
