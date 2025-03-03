@@ -4,10 +4,10 @@ import os
 import smtplib
 from email.mime.text import MIMEText
 from fastapi import FastAPI, File, UploadFile, HTTPException
-from backend.model_pipeline.preprocessing import preprocess_data
-from backend.model_pipeline.training import train_gbm
-from backend.model_pipeline.evaluation import evaluate_model
-from backend.model_pipeline.io import save_model, load_model
+from model_pipeline.preprocessing import preprocess_data
+from model_pipeline.training import train_gbm
+from model_pipeline.evaluation import evaluate_model
+from model_pipeline.io import save_model, load_model
 import mlflow
 import mlflow.sklearn
 import pandas as pd
