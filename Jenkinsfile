@@ -64,8 +64,8 @@ pipeline {
         stage('Build Docker Images') {
             steps {
                 script {
-                    sh 'docker build -f Dockerfile.backend -t essaidimaryem/ml-pipeline-backend:latest ./backend'
-                    sh 'docker build -f Dockerfile.frontend -t essaidimaryem/ml-pipeline-frontend:latest ./frontend'
+                    sh 'docker build -f backend/Dockerfile -t essaidimaryem/ml-pipeline-backend:latest ./backend'
+                    sh 'docker build -f frontend/Dockerfile -t essaidimaryem/ml-pipeline-frontend:latest ./frontend'
                 }
             }
         }
