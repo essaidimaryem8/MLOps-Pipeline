@@ -1,7 +1,7 @@
 pipeline {
     agent any
     environment {
-        DOCKER_CREDENTIALS = credentials('docker-hub-credentials')
+        DOCKER_CREDENTIALS = credentials('DOCKER_CREDENTIALS')
         SENDER_EMAIL = credentials('sender-email')
         RECIPIENT_EMAIL = credentials('recipient-email')
     }
@@ -82,9 +82,9 @@ pipeline {
         }
         stage('Run Pipeline') {
             steps {
-                // Free port 5000 if it's in use
+                // Free port 5001 if it's in use (updated port from previous step)
                 sh '''
-                    PORT=5000
+                    PORT=5001
                     if lsof -i:$PORT; then
                         echo "Port $PORT is in use, attempting to free it..."
                         PID=$(lsof -i:$PORT -t)
@@ -118,9 +118,9 @@ pipeline {
     }
     post {
         always {
-            dir(workspace) {
+            dir(env.WORKSPACE) {
                 sh '''
-                    docker-compose down
+                    docker-compose down || true
                 '''
             }
             sh '''
