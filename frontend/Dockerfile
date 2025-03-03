@@ -7,6 +7,9 @@ WORKDIR /app
 # Copy the application code
 COPY app.py .
 
+# Ensure the container runs as myuser
+USER myuser
+
 # Expose the port for Streamlit
 EXPOSE 8501
 

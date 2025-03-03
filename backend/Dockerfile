@@ -8,6 +8,9 @@ WORKDIR /app
 COPY main.py .
 COPY model_pipeline/ ./model_pipeline/
 
+# Ensure the container runs as myuser
+USER myuser
+
 # Expose the port for FastAPI
 EXPOSE 8000
 

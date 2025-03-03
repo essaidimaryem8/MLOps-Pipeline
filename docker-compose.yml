@@ -12,7 +12,6 @@ services:
     environment:
       - MLFLOW_TRACKING_URI=http://mlflow:5000
       - ELASTICSEARCH_URL=http://elasticsearch:9200
-    user: myuser  # Run as non-root user
 
   mlflow:
     build:
@@ -24,7 +23,6 @@ services:
       - ./mlruns:/mlruns
     environment:
       - MLFLOW_TRACKING_URI=file:///mlruns
-    user: myuser  # Run as non-root user
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.14.3
@@ -53,7 +51,6 @@ services:
       - backend
     volumes:
       - ./frontend:/app
-    user: myuser  # Run as non-root user
 
 networks:
   ml_network:

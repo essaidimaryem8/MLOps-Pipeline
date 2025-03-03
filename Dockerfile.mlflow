@@ -4,6 +4,9 @@ FROM essaidimaryem/ml-project:latest
 # Set the working directory (consistent with other services)
 WORKDIR /app
 
+# Ensure the container runs as myuser
+USER myuser
+
 # Expose MLflow's default tracking server port
 EXPOSE 5000
 
