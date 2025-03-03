@@ -11,7 +11,7 @@ pipeline {
                 script {
                     // Check if backend/requirements.txt or backend/model_pipeline/ has changed
                     def changes = sh(script: "git diff --name-only HEAD^ HEAD", returnStdout: true).trim()
-                    if (changes.contains('backend/requirements.txt') || changes.contains('backend/model_pipeline/')) {
+                    if (changes.contains('requirements.txt') || changes.contains('backend/model_pipeline/')) {
                         dir('backend') {
                             sh '''
                                 docker build -f Dockerfile.dependencies -t essaidimaryem/ml-project:latest .
@@ -20,7 +20,7 @@ pipeline {
                             '''
                         }
                     } else {
-                        echo "No changes in backend/requirements.txt or backend/model_pipeline/, skipping dependencies image build."
+                        echo "No changes in requirements.txt or backend/model_pipeline/, skipping dependencies image build."
                     }
                 }
             }
@@ -74,8 +74,10 @@ pipeline {
                 script {
                     sh '''
                         echo $DOCKER_CREDENTIALS_PSW | docker login -u $DOCKER_CREDENTIALS_USR --password-stdin
-                        docker push essaidimaryem/ml-pipeline-backend:latest
-                        docker push essaidimaryem/ml-pipeline-frontend:latest
+                        # Push images in parallel
+                        docker push essaidimaryem/ml-pipeline-backend:latest &
+                        docker push essaidimaryem/ml-pipeline-frontend:latest &
+                        wait
                     '''
                 }
             }
@@ -94,9 +96,7 @@ pipeline {
                         echo "Port $PORT is not in use."
                     fi
                 '''
-                // Clear the mlruns directory to reset the MLflow database
                 sh '''
-                    rm -rf mlruns
                     docker-compose down
                     docker-compose build backend mlflow elasticsearch kibana
                     docker-compose up -d backend mlflow elasticsearch kibana
@@ -120,37 +120,26 @@ pipeline {
                 '''
             }
         }
-        stage('Deploy') {
-            steps {
-                echo "Deploying the application..."
-                echo "Backend deployed at http://localhost:8000"
-                echo "Frontend deployed at http://localhost:8501"
-                echo "MLflow UI available at http://localhost:5001"
-                echo "Elasticsearch available at http://localhost:9200"
-                echo "Kibana available at http://localhost:5601"
-            }
-        }
     }
     post {
         always {
-            dir(env.WORKSPACE) {
-                sh '''
-                    docker-compose down || true
-                '''
-            }
-            sh '''
-                docker system prune -f
-            '''
-            script {
-                if (currentBuild.result == 'SUCCESS') {
-                    echo "Pipeline succeeded!"
-                } else {
-                    echo "Pipeline failed!"
+            node {
+                dir(env.WORKSPACE) {
+                    sh '''
+                        # Clear mlruns directory to prevent permission issues in future runs
+                        rm -rf mlruns || true
+                        docker-compose down || true
+                    '''
                 }
-                withCredentials([string(credentialsId: 'sender-email', variable: 'SENDER_EMAIL'), string(credentialsId: 'recipient-email', variable: 'RECIPIENT_EMAIL')]) {
-                    mail to: "${RECIPIENT_EMAIL}",
-                         subject: "Pipeline ${currentBuild.result == 'SUCCESS' ? 'Succeeded' : 'Failed'}: ${env.JOB_NAME} Build #${env.BUILD_NUMBER}",
-                         body: "The pipeline ${env.JOB_NAME} Build #${env.BUILD_NUMBER} has ${currentBuild.result == 'SUCCESS' ? 'succeeded' : 'failed'}. Check the logs at ${env.BUILD_URL}"
+                sh '''
+                    docker system prune -f
+                '''
+                script {
+                    withCredentials([string(credentialsId: 'sender-email', variable: 'SENDER_EMAIL'), string(credentialsId: 'recipient-email', variable: 'RECIPIENT_EMAIL')]) {
+                        mail to: "${RECIPIENT_EMAIL}",
+                             subject: "Pipeline ${currentBuild.result == 'SUCCESS' ? 'Succeeded' : 'Failed'}: ${env.JOB_NAME} Build #${env.BUILD_NUMBER}",
+                             body: "The pipeline ${env.JOB_NAME} Build #${env.BUILD_NUMBER} has ${currentBuild.result == 'SUCCESS' ? 'succeeded' : 'failed'}. Check the logs at ${env.BUILD_URL}"
+                    }
                 }
             }
         }
