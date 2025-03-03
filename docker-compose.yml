@@ -1,101 +1,59 @@
 services:
   backend:
-    image: essaidimaryem/ml-pipeline-backend:latest
-    container_name: backend
-    environment:
-      - DOCKER=true
-      - EMAIL_PASSWORD=epcu lndl gwiy wole
-      - SENDER_EMAIL=maryemessaidi8@gmail.com
-      - RECIPIENT_EMAIL=maryem.essaidi@esprit.tn
-      - MLFLOW_TRACKING_URI=http://mlflow:5000
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
     ports:
       - "8000:8000"
     volumes:
-      - ./data:/app/data
-      - ./models:/app/models
-      - ./tests:/app/tests
-    networks:
-      - ml_network
+      - ./backend:/app
     depends_on:
-      - mlflow
-    deploy:
-      resources:
-        limits:
-          memory: 4G  # Limit backend container to 4GB of memory
-        reservations:
-          memory: 2G  # Reserve at least 2GB for the container
-
-  frontend:
-    image: essaidimaryem/ml-pipeline-frontend:latest
-    container_name: frontend
+      - elasticsearch
     environment:
-      - BACKEND_URL=http://backend:8000
-    ports:
-      - "8501:8501"
-    networks:
-      - ml_network
-    depends_on:
-      - backend
-    deploy:
-      resources:
-        limits:
-          memory: 1G  # Limit frontend container to 1GB of memory
-        reservations:
-          memory: 512M  # Reserve at least 512MB for the container
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+    user: myuser  # Run as non-root user
 
   mlflow:
-    image: ghcr.io/mlflow/mlflow:latest
-    container_name: mlflow
-    command: ["mlflow", "server", "--host", "0.0.0.0", "--port", "5000", "--backend-store-uri", "sqlite:///mlflow.db", "--default-artifact-root", "/mlruns"]
+    build:
+      context: .
+      dockerfile: Dockerfile.mlflow
     ports:
       - "5001:5000"
     volumes:
       - ./mlruns:/mlruns
-    networks:
-      - ml_network
-    deploy:
-      resources:
-        limits:
-          memory: 1G  # Limit mlflow container to 1GB of memory
-        reservations:
-          memory: 512M  # Reserve at least 512MB for the container
+    environment:
+      - MLFLOW_TRACKING_URI=file:///mlruns
+    user: myuser  # Run as non-root user
 
   elasticsearch:
-    image: elasticsearch:8.12.2
-    container_name: elasticsearch
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.14.3
+    ports:
+      - "9200:9200"
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=false
-      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
-    ports:
-      - "9200:9200"
-      - "9300:9300"
-    volumes:
-      - ./elasticsearch_data:/usr/share/elasticsearch/data
-    networks:
-      - ml_network
-    deploy:
-      resources:
-        limits:
-          memory: 2G  # Limit elasticsearch container to 2GB of memory
-        reservations:
-          memory: 1G  # Reserve at least 1GB for the container
 
   kibana:
-    image: kibana:8.12.2
-    container_name: kibana
-    depends_on:
-      - elasticsearch
+    image: docker.elastic.co/kibana/kibana:8.14.3
     ports:
       - "5601:5601"
-    networks:
-      - ml_network
-    deploy:
-      resources:
-        limits:
-          memory: 1G  # Limit kibana container to 1GB of memory
-        reservations:
-          memory: 512M  # Reserve at least 512MB for the container
+    depends_on:
+      - elasticsearch
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "8501:8501"
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+    user: myuser  # Run as non-root user
 
 networks:
   ml_network:
