@@ -6,3 +6,4 @@ scikit-learn==1.2.0
 python-multipart==0.0.6
 setuptools==65.5.0
 streamlit==1.20.0
+pycodestyle==2.12.1
