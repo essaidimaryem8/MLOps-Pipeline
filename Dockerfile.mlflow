@@ -1,28 +1,11 @@
-# Use the official MLflow base image
-FROM python:3.11.7-slim
+# Use the prebuilt base image with dependencies
+FROM essaidimaryem/ml-project:latest
 
-# Set the working directory
-WORKDIR /mlflow
-
-# Install required dependencies
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends gcc libc-dev && \
-    pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir mlflow==2.3.0 psycopg2-binary && \
-    apt-get remove -y gcc libc-dev && \
-    apt-get autoremove -y && \
-    rm -rf /var/lib/apt/lists/*
-
-# Create a non-root user for security
-RUN useradd -m myuser
-USER myuser
+# Set the working directory (consistent with other services)
+WORKDIR /app
 
 # Expose MLflow's default tracking server port
 EXPOSE 5000
 
-# Set environment variables
-ENV MLFLOW_TRACKING_URI=file:///mlruns
-
 # Start MLflow server
 CMD ["mlflow", "server", "--backend-store-uri", "file:///mlruns", "--host", "0.0.0.0", "--port", "5000"]
-
