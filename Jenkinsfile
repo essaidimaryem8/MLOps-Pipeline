@@ -43,7 +43,7 @@ pipeline {
                     sh '''
                         docker run --rm \
                             -v $(pwd)/..:/app \
-                            -e PYTHONPATH=/app \
+                            -e PYTHONPATH=/app:/app/backend \
                             -e MLFLOW_TRACKING_URI=file:///tmp/mlflow-tests \
                             -e TESTING=true \
                             -w /app/backend \
