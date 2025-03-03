@@ -1,40 +1,45 @@
 pipeline {
     agent any
     environment {
-        DOCKER_HUB_USERNAME = 'essaidimaryem'  // Your Docker Hub username
-        DOCKER_HUB_PASSWORD = credentials('DOCKER_CREDENTIALS')  // Jenkins credential ID
-        MLFLOW_TRACKING_URI = 'http://localhost:5000'
-        JENKINS = 'true'
+        DOCKER_CREDENTIALS = credentials('docker-hub-credentials')
+        SENDER_EMAIL = credentials('sender-email')
+        RECIPIENT_EMAIL = credentials('recipient-email')
     }
     stages {
-        stage('Checkout') {
+        stage('Build Dependencies Image') {
             steps {
-                git branch: 'master',  // Changed from 'main' to 'master'
-                    credentialsId: 'ML_Pipeline',
-                    url: 'https://github.com/essaidimaryem8/ML-Pipeline.git'
-            }
-        }
-        stage('Set Up Python') {
-            steps {
-                // No need to set up a virtual environment; dependencies are in the Docker image
-                echo "Using essaidimaryem/ml-project image with preinstalled dependencies"
+                script {
+                    // Check if backend/requirements.txt or backend/model_pipeline/ has changed
+                    def changes = sh(script: "git diff --name-only HEAD^ HEAD", returnStdout: true).trim()
+                    if (changes.contains('backend/requirements.txt') || changes.contains('backend/model_pipeline/')) {
+                        dir('backend') {
+                            sh '''
+                                docker build -f Dockerfile.dependencies -t essaidimaryem/ml-project:latest .
+                                echo $DOCKER_CREDENTIALS_PSW | docker login -u $DOCKER_CREDENTIALS_USR --password-stdin
+                                docker push essaidimaryem/ml-project:latest
+                            '''
+                        }
+                    } else {
+                        echo "No changes in backend/requirements.txt or backend/model_pipeline/, skipping dependencies image build."
+                    }
+                }
             }
         }
         stage('Code Quality') {
             steps {
-                // Run pycodestyle inside a container using essaidimaryem/ml-project
-                sh '''
-                    docker run --rm \
-                        -v $(pwd)/backend:/app \
-                        essaidimaryem/ml-project:latest \
-                        pycodestyle main.py model_pipeline/preprocessing.py model_pipeline/training.py model_pipeline/evaluation.py model_pipeline/io.py tests/test_main.py --max-line-length=120 --ignore=E127,E203,E266,E501,W503
-                '''
+                dir('backend') {
+                    sh '''
+                        docker run --rm \
+                            -v $(pwd)/backend:/app \
+                            essaidimaryem/ml-project:latest \
+                            pycodestyle main.py model_pipeline/preprocessing.py model_pipeline/training.py model_pipeline/evaluation.py model_pipeline/io.py tests/test_main.py --max-line-length=120 --ignore=E127,E203,E266,E501,W503
+                    '''
+                }
             }
         }
         stage('Run Tests') {
             steps {
                 dir('backend') {
-                    // Run pytest inside a container using essaidimaryem/ml-project
                     sh '''
                         docker run --rm \
                             -v $(pwd)/..:/app \
@@ -50,123 +55,87 @@ pipeline {
         }
         stage('Start MLflow Server') {
             steps {
-                dir('backend') {
-                    // Start MLflow server inside a container using essaidimaryem/ml-project
-                    sh '''
-                        docker run -d \
-                            --name mlflow-server \
-                            -p 5000:5000 \
-                            -v $(pwd)/..:/app \
-                            -e PYTHONPATH=/app \
-                            essaidimaryem/ml-project:latest \
-                            mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///app/backend/mlflow.db --default-artifact-root /app/backend/mlruns
-                    '''
-                    // Wait for server to start
-                    sh 'sleep 15'
-                }
+                sh '''
+                    docker-compose down
+                    docker-compose up -d mlflow
+                '''
             }
         }
         stage('Build Docker Images') {
             steps {
                 script {
-                    // Login to Docker Hub
-                    sh 'echo $DOCKER_HUB_PASSWORD_PSW | docker login -u $DOCKER_HUB_USERNAME --password-stdin'
-
-                    // Build backend image (already using essaidimaryem/ml-project as base)
-                    sh "docker build -t ${DOCKER_HUB_USERNAME}/ml-pipeline-backend:latest -f backend/Dockerfile ./backend"
-                    // Build frontend image (already using essaidimaryem/ml-project as base)
-                    sh "docker build -t ${DOCKER_HUB_USERNAME}/ml-pipeline-frontend:latest -f frontend/Dockerfile ./frontend"
+                    sh 'docker build -f Dockerfile.backend -t essaidimaryem/ml-pipeline-backend:latest ./backend'
+                    sh 'docker build -f Dockerfile.frontend -t essaidimaryem/ml-pipeline-frontend:latest ./frontend'
                 }
             }
         }
         stage('Push Docker Images') {
             steps {
                 script {
-                    // Ensure Docker Hub login
-                    sh 'echo $DOCKER_HUB_PASSWORD_PSW | docker login -u $DOCKER_HUB_USERNAME --password-stdin'
-
-                    // Push backend image
-                    sh "docker push ${DOCKER_HUB_USERNAME}/ml-pipeline-backend:latest"
-                    // Push frontend image
-                    sh "docker push ${DOCKER_HUB_USERNAME}/ml-pipeline-frontend:latest"
+                    sh '''
+                        echo $DOCKER_CREDENTIALS_PSW | docker login -u $DOCKER_CREDENTIALS_USR --password-stdin
+                        docker push essaidimaryem/ml-pipeline-backend:latest
+                        docker push essaidimaryem/ml-pipeline-frontend:latest
+                    '''
                 }
             }
         }
         stage('Run Pipeline') {
             steps {
-                sh 'docker-compose down'
-                sh 'docker-compose build backend mlflow elasticsearch kibana'
-                sh 'docker-compose up -d backend mlflow elasticsearch kibana'
-                // Wait for services to start
-                sh 'sleep 15'
-                // Remove existing mlflow.db to avoid UNIQUE constraint errors
-                sh 'docker exec backend rm -f /app/mlflow.db'
-                // Run pipeline steps sequentially with logging
+                // Free port 5000 if it's in use
                 sh '''
-                    docker exec backend bash -c "export MLFLOW_TRACKING_URI=http://mlflow:5000 && export PYTHONPATH=/app && python /app/main.py --prepare_data 2>&1 | tee /app/prepare_data.log"
+                    PORT=5000
+                    if lsof -i:$PORT; then
+                        echo "Port $PORT is in use, attempting to free it..."
+                        PID=$(lsof -i:$PORT -t)
+                        kill -9 $PID
+                        echo "Port $PORT has been freed."
+                    else
+                        echo "Port $PORT is not in use."
+                    fi
                 '''
                 sh '''
-                    docker exec backend bash -c "export MLFLOW_TRACKING_URI=http://mlflow:5000 && export PYTHONPATH=/app && python /app/main.py --train 2>&1 | tee /app/train.log"
+                    docker-compose down
+                    docker-compose build backend mlflow elasticsearch kibana
+                    docker-compose up -d backend mlflow elasticsearch kibana
                 '''
+                // Run the pipeline steps
                 sh '''
-                    docker exec backend bash -c "export MLFLOW_TRACKING_URI=http://mlflow:5000 && export PYTHONPATH=/app && python /app/main.py --evaluate 2>&1 | tee /app/evaluate.log"
-                '''
-                sh '''
-                    docker exec backend bash -c "export MLFLOW_TRACKING_URI=http://mlflow:5000 && export PYTHONPATH=/app && python /app/main.py --retrain 2>&1 | tee /app/retrain.log"
-                '''
-                // Verify tracking by checking if GBM_Experiment exists
-                sh '''
-                    docker run --rm \
-                        -v $(pwd)/backend/mlruns:/mlruns \
-                        -e MLFLOW_TRACKING_URI=http://localhost:5000 \
-                        essaidimaryem/ml-project:latest \
-                        mlflow experiments list --view-type all | grep GBM_Experiment
+                    docker exec backend python /app/main.py --prepare_data --train --evaluate --retrain
                 '''
             }
         }
         stage('Deploy') {
             steps {
-                echo 'Deploying to production (simulated)'
-                echo "Docker images pushed: ${DOCKER_HUB_USERNAME}/ml-pipeline-backend:latest and ${DOCKER_HUB_USERNAME}/ml-pipeline-frontend:latest"
-                echo "You can now pull and run these images locally with Docker Compose."
+                echo "Deploying the application..."
+                echo "Backend deployed at http://localhost:8000"
+                echo "Frontend deployed at http://localhost:8501"
+                echo "MLflow UI available at http://localhost:5001"
+                echo "Elasticsearch available at http://localhost:9200"
+                echo "Kibana available at http://localhost:5601"
             }
         }
     }
     post {
         always {
-            // Change directory to where docker-compose.yml is located
-            dir('/var/lib/jenkins/workspace/ML-Pipeline') {
-                sh 'docker-compose down || true'  // Ignore errors if docker-compose.yml is not found
+            dir(workspace) {
+                sh '''
+                    docker-compose down
+                '''
             }
-            sh 'docker system prune -f'
-        }
-        success {
-            echo 'Pipeline completed successfully!'
+            sh '''
+                docker system prune -f
+            '''
             script {
-                try {
-                    withCredentials([string(credentialsId: 'sender-email', variable: 'SENDER_EMAIL'),
-                                     string(credentialsId: 'recipient-email', variable: 'RECIPIENT_EMAIL')]) {
-                        mail to: "${RECIPIENT_EMAIL}",
-                             subject: "Pipeline Success: ML Pipeline",
-                             body: "The ML Pipeline job completed successfully on ${env.BUILD_URL}. Docker images are pushed to ${DOCKER_HUB_USERNAME}/ml-pipeline-backend:latest and ${DOCKER_HUB_USERNAME}/ml-pipeline-frontend:latest."
-                    }
-                } catch (Exception e) {
-                    echo "Failed to send success email: ${e.getMessage()}"
+                if (currentBuild.result == 'SUCCESS') {
+                    echo "Pipeline succeeded!"
+                } else {
+                    echo "Pipeline failed!"
                 }
-            }
-        }
-        failure {
-            echo 'Pipeline failed!'
-            script {
-                try {
-                    withCredentials([string(credentialsId: 'sender-email', variable: 'SENDER_EMAIL'),
-                                     string(credentialsId: 'recipient-email', variable: 'RECIPIENT_EMAIL')]) {
-                        mail to: "${RECIPIENT_EMAIL}",
-                             subject: "Pipeline Failure: ML Pipeline",
-                             body: "The ML Pipeline job failed on ${env.BUILD_URL}. Check logs for details."
-                    }
-                } catch (Exception e) {
-                    echo "Failed to send failure email: ${e.getMessage()}"
+                withCredentials([string(credentialsId: 'sender-email', variable: 'SENDER_EMAIL'), string(credentialsId: 'recipient-email', variable: 'RECIPIENT_EMAIL')]) {
+                    mail to: "${RECIPIENT_EMAIL}",
+                         subject: "Pipeline ${currentBuild.result == 'SUCCESS' ? 'Succeeded' : 'Failed'}: ${env.JOB_NAME} Build #${env.BUILD_NUMBER}",
+                         body: "The pipeline ${env.JOB_NAME} Build #${env.BUILD_NUMBER} has ${currentBuild.result == 'SUCCESS' ? 'succeeded' : 'failed'}. Check the logs at ${env.BUILD_URL}"
                 }
             }
         }
