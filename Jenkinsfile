@@ -94,10 +94,25 @@ pipeline {
                         echo "Port $PORT is not in use."
                     fi
                 '''
+                // Clear the mlruns directory to reset the MLflow database
                 sh '''
+                    rm -rf mlruns
                     docker-compose down
                     docker-compose build backend mlflow elasticsearch kibana
                     docker-compose up -d backend mlflow elasticsearch kibana
+                    # Wait for MLflow server to be ready
+                    for i in {1..30}; do
+                        if curl -s http://localhost:5001; then
+                            echo "MLflow server is up!"
+                            break
+                        fi
+                        echo "Waiting for MLflow server... ($i/30)"
+                        sleep 2
+                    done
+                    if ! curl -s http://localhost:5001; then
+                        echo "MLflow server did not start in time"
+                        exit 1
+                    fi
                 '''
                 // Run the pipeline steps
                 sh '''
