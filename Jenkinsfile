@@ -9,16 +9,14 @@ pipeline {
         stage('Build Dependencies Image') {
             steps {
                 script {
-                    // Check if backend/requirements.txt or backend/model_pipeline/ has changed
+                    // Check if requirements.txt (in root) or backend/model_pipeline/ has changed
                     def changes = sh(script: "git diff --name-only HEAD^ HEAD", returnStdout: true).trim()
                     if (changes.contains('requirements.txt') || changes.contains('backend/model_pipeline/')) {
-                        dir('backend') {
-                            sh '''
-                                docker build -f Dockerfile.dependencies -t essaidimaryem/ml-project:latest .
-                                echo $DOCKER_CREDENTIALS_PSW | docker login -u $DOCKER_CREDENTIALS_USR --password-stdin
-                                docker push essaidimaryem/ml-project:latest
-                            '''
-                        }
+                        sh '''
+                            docker build -f Dockerfile.dependencies -t essaidimaryem/ml-project:latest .
+                            echo $DOCKER_CREDENTIALS_PSW | docker login -u $DOCKER_CREDENTIALS_USR --password-stdin
+                            docker push essaidimaryem/ml-project:latest
+                        '''
                     } else {
                         echo "No changes in requirements.txt or backend/model_pipeline/, skipping dependencies image build."
                     }
