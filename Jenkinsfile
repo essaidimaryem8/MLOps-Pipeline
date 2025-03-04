@@ -46,7 +46,7 @@ pipeline {
                             -e TESTING=true \
                             -w /app/backend \
                             essaidimaryem/ml-project:latest \
-                            pytest tests/test_main.py -v --cache-clear --cache-dir=/tmp/pytest-cache
+                            pytest tests/test_main.py -v --cache-clear --cache-dir /tmp/pytest-cache
                     '''
                 }
             }
