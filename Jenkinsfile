@@ -118,7 +118,7 @@ pipeline {
                     fi
                 '''
                 sh '''
-                    docker exec backend python /app/main.py --prepare_data --train --evaluate --retrain
+                    docker-compose exec backend python /app/main.py --prepare_data --train --evaluate --retrain
                 '''
             }
         }
