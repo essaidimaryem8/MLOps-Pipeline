@@ -5,13 +5,17 @@ FROM essaidimaryem/ml-project:latest
 WORKDIR /app
 
 # Copy the application code
-COPY main.py .
-COPY model_pipeline/ ./model_pipeline/
+COPY backend/main.py .
+COPY backend/model_pipeline/ ./model_pipeline/
 
 # Create /app/data directory and set ownership for /app/data only
 RUN mkdir -p /app/data && \
     chown myuser:myuser /app/data && \
     chmod 755 /app/data
+
+# Copy the data files into /app/data
+COPY data/raw_data/churn-bigml-80.csv /app/data/
+COPY data/raw_data/churn-bigml-20.csv /app/data/
 
 # Ensure the container runs as myuser
 USER myuser
