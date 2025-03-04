@@ -84,7 +84,6 @@ pipeline {
         }
         stage('Run Pipeline') {
             steps {
-                // Free port 5001 if it's in use (updated port from previous step)
                 sh '''
                     PORT=5001
                     if lsof -i:$PORT; then
@@ -101,20 +100,20 @@ pipeline {
                     docker-compose build backend mlflow elasticsearch kibana
                     docker-compose up -d backend mlflow elasticsearch kibana
                     # Wait for MLflow server to be ready
-                    for i in {1..30}; do
+                    for i in {1..60}; do
                         if curl -s http://localhost:5001; then
                             echo "MLflow server is up!"
                             break
                         fi
-                        echo "Waiting for MLflow server... ($i/30)"
+                        echo "Waiting for MLflow server... ($i/60)"
                         sleep 2
                     done
                     if ! curl -s http://localhost:5001; then
-                        echo "MLflow server did not start in time"
+                        echo "MLflow server did not start in time, checking logs..."
+                        docker-compose logs mlflow
                         exit 1
                     fi
                 '''
-                // Run the pipeline steps
                 sh '''
                     docker exec backend python /app/main.py --prepare_data --train --evaluate --retrain
                 '''
