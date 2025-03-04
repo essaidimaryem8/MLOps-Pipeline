@@ -11,7 +11,8 @@ RUN apt-get update && \
     pip install --no-cache-dir -r requirements.txt && \
     apt-get remove -y gcc libc-dev && \
     apt-get autoremove -y && \
-    rm -rf /var/lib/apt/lists/*
+    rm -rf /var/lib/apt/lists/* && \
+    rm -rf /app/__pycache__ /app/*/__pycache__
 
 # Create myuser and set up /app with correct permissions
 RUN useradd -m myuser && \
