@@ -1,10 +1,9 @@
-# Use a specific slim version of Python for reproducibility
-FROM python:3.11.7-slim
+FROM python:3.11-slim
 
 # Set the working directory
 WORKDIR /app
 
-# Install build dependencies, copy requirements, and install Python dependencies
+# Copy and install dependencies
 COPY requirements.txt .
 RUN apt-get update && \
     apt-get install -y --no-install-recommends gcc libc-dev && \
@@ -14,6 +13,11 @@ RUN apt-get update && \
     apt-get autoremove -y && \
     rm -rf /var/lib/apt/lists/*
 
-# Create a non-root user for security
-RUN useradd -m myuser
+# Create myuser and set up /app with correct permissions
+RUN useradd -m myuser && \
+    chown -R myuser:myuser /app && \
+    chmod -R 755 /app && \
+    chattr -i /app /app/* 2>/dev/null || true
+
+# Ensure the container runs as myuser
 USER myuser

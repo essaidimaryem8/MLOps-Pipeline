@@ -4,9 +4,6 @@ FROM essaidimaryem/ml-project:latest
 # Set the working directory
 WORKDIR /app
 
-# Ensure /app is writable by root during build
-RUN chmod -R 755 /app
-
 # Copy the application code
 COPY main.py .
 COPY model_pipeline/ ./model_pipeline/
