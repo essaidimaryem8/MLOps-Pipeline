@@ -64,7 +64,7 @@ pipeline {
             steps {
                 script {
                     // Changed context to project root
-                    sh 'docker build -f backend/Dockerfile -t essaidimaryem/ml-project-backend:latest .'
+                    sh 'docker build -f backend/Dockerfile -t essaidimaryem/ml-pipeline-backend:latest .'
                     sh 'docker build -f frontend/Dockerfile -t essaidimaryem/ml-pipeline-frontend:latest ./frontend'
                 }
             }
@@ -133,6 +133,8 @@ pipeline {
                 '''
                 sh '''
                     docker-compose down
+                    # Remove the backend-data volume to ensure it is recreated and initialized
+                    docker volume rm ml-pipeline_backend-data || true
                     docker-compose build backend mlflow elasticsearch kibana
                     docker-compose up -d backend mlflow elasticsearch kibana
                     # Debug: Check initial logs for MLflow and backend
@@ -140,6 +142,9 @@ pipeline {
                     docker-compose logs mlflow
                     echo "Checking initial backend service logs..."
                     docker-compose logs backend
+                    # Debug: Verify data files in /app/data
+                    echo "Checking data files in /app/data..."
+                    docker-compose exec backend ls -l /app/data
                     # Wait for MLflow server to be ready
                     for i in {1..60}; do
                         if curl -s http://localhost:5001; then
