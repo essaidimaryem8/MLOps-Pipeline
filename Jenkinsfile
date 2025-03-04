@@ -99,6 +99,9 @@ pipeline {
                     docker-compose down
                     docker-compose build backend mlflow elasticsearch kibana
                     docker-compose up -d backend mlflow elasticsearch kibana
+                    # Debug: Check MLflow server logs immediately after starting
+                    echo "Checking initial MLflow server logs..."
+                    docker-compose logs mlflow
                     # Wait for MLflow server to be ready
                     for i in {1..60}; do
                         if curl -s http://localhost:5001; then
@@ -109,7 +112,7 @@ pipeline {
                         sleep 2
                     done
                     if ! curl -s http://localhost:5001; then
-                        echo "MLflow server did not start in time, checking logs..."
+                        echo "MLflow server did not start in time, checking final logs..."
                         docker-compose logs mlflow
                         exit 1
                     fi
