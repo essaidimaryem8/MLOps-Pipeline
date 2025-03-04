@@ -46,7 +46,7 @@ pipeline {
                             -e TESTING=true \
                             -w /app/backend \
                             essaidimaryem/ml-project:latest \
-                            pytest tests/test_main.py -v --cache-clear --cache-dir /tmp/pytest-cache
+                            pytest tests/test_main.py -v
                     '''
                 }
             }
@@ -125,7 +125,7 @@ pipeline {
             node('') {  // Use empty label to run on any available agent
                 dir(env.WORKSPACE) {
                     sh '''
-                        # Clear mlruns directory to prevent permission issues in future runs
+                        # Clear mlruns and pytest cache directories to prevent permission issues in future runs
                         rm -rf mlruns || true
                         rm -rf backend/.pytest_cache || true
                         docker-compose down || true
