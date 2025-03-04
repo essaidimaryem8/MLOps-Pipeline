@@ -108,6 +108,9 @@ pipeline {
                 '''
                 sh '''
                     docker-compose down
+                    # Create /app/data directory on the host with writable permissions
+                    mkdir -p data
+                    chmod -R 777 data
                     docker-compose build backend mlflow elasticsearch kibana
                     docker-compose up -d backend mlflow elasticsearch kibana
                     # Debug: Check initial logs for MLflow and backend
