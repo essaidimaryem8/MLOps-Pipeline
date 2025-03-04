@@ -55,6 +55,7 @@ pipeline {
             steps {
                 sh '''
                     docker-compose down
+                    docker-compose build mlflow
                     docker-compose up -d mlflow
                 '''
             }
