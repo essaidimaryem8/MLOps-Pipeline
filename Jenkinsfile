@@ -9,12 +9,17 @@ pipeline {
         stage('Build Dependencies Image') {
             steps {
                 script {
-                    // Temporarily remove conditional check to force rebuild
-                    sh '''
-                        docker build -f Dockerfile.dependencies -t essaidimaryem/ml-project:latest .
-                        echo $DOCKER_CREDENTIALS_PSW | docker login -u $DOCKER_CREDENTIALS_USR --password-stdin
-                        docker push essaidimaryem/ml-project:latest
-                    '''
+                    // Check if requirements.txt (in root) or backend/model_pipeline/ has changed
+                    def changes = sh(script: "git diff --name-only HEAD^ HEAD", returnStdout: true).trim()
+                    if (changes.contains('requirements.txt') || changes.contains('backend/model_pipeline/')) {
+                        sh '''
+                            docker build -f Dockerfile.dependencies -t essaidimaryem/ml-project:latest .
+                            echo $DOCKER_CREDENTIALS_PSW | docker login -u $DOCKER_CREDENTIALS_USR --password-stdin
+                            docker push essaidimaryem/ml-project:latest
+                        '''
+                    } else {
+                        echo "No changes in requirements.txt or backend/model_pipeline/, skipping dependencies image build."
+                    }
                 }
             }
         }
@@ -41,7 +46,7 @@ pipeline {
                             -e TESTING=true \
                             -w /app/backend \
                             essaidimaryem/ml-project:latest \
-                            pytest tests/test_main.py -v
+                            pytest tests/test_main.py -v --cache-clear
                     '''
                 }
             }
