@@ -63,7 +63,8 @@ pipeline {
         stage('Build Docker Images') {
             steps {
                 script {
-                    sh 'docker build -f backend/Dockerfile -t essaidimaryem/ml-pipeline-backend:latest .'  # Changed context to .
+                    // Changed context to project root
+                    sh 'docker build -f backend/Dockerfile -t essaidimaryem/ml-project-backend:latest .'
                     sh 'docker build -f frontend/Dockerfile -t essaidimaryem/ml-pipeline-frontend:latest ./frontend'
                 }
             }
