@@ -73,83 +73,107 @@ pipeline {
                 script {
                     sh '''
                         echo $DOCKER_CREDENTIALS_PSW | docker login -u $DOCKER_CREDENTIALS_USR --password-stdin
-                        # Push images in parallel
-                        docker push essaidimaryem/ml-project:latest &
-                        docker push essaidimaryem/ml-pipeline-backend:latest &
-                        docker push essaidimaryem/ml-pipeline-frontend:latest &
-                        wait
+
+                        # Retry function for docker push with exponential backoff
+                        retry_push() {
+                            local image=$1
+                            local max_attempts=3
+                            local attempt=1
+                            local delay=5
+                            while [ $attempt -le $max_attempts ]; do
+                                echo "Pushing $image (attempt $attempt/$max_attempts)..."
+                                if docker push $image; then
+                                    echo "Successfully pushed $image"
+                                    return 0
+                                else
+                                    echo "Failed to push $image"
+                                    if [ $attempt -eq $max_attempts ]; then
+                                        echo "Max attempts reached for $image, giving up."
+                                        return 1
+                                    fi
+                                    sleep $delay
+                                    attempt=$((attempt + 1))
+                                    delay=$((delay * 2))
+                                fi
+                            done
+                        }
+
+                        # Push images sequentially with retries
+                        retry_push essaidimaryem/ml-project:latest || exit 1
+                        retry_push essaidimaryem/ml-pipeline-backend:latest || exit 1
+                        retry_push essaidimaryem/ml-pipeline-frontend:latest || exit 1
                     '''
                 }
             }
         }
         stage('Run Pipeline') {
-	    steps {
-		sh '''
-		    # Check and free port 5001 for MLflow
-		    PORT=5001
-		    if lsof -i:$PORT; then
-		        echo "Port $PORT is in use, attempting to free it..."
-		        PID=$(lsof -i:$PORT -t)
-		        kill -9 $PID
-		        echo "Port $PORT has been freed."
-		    else
-		        echo "Port $PORT is not in use."
-		    fi
-		    # Check and free port 8000 for backend
-		    PORT=8000
-		    if lsof -i:$PORT; then
-		        echo "Port $PORT is in use, attempting to free it..."
-		        PID=$(lsof -i:$PORT -t)
-		        kill -9 $PID
-		        echo "Port $PORT has been freed."
-		    else
-		        echo "Port $PORT is not in use."
-		    fi
-		'''
-		sh '''
-		    docker-compose down
-		    docker-compose build backend mlflow elasticsearch kibana
-		    docker-compose up -d backend mlflow elasticsearch kibana
-		    # Debug: Check initial logs for MLflow and backend
-		    echo "Checking initial MLflow server logs..."
-		    docker-compose logs mlflow
-		    echo "Checking initial backend service logs..."
-		    docker-compose logs backend
-		    # Wait for MLflow server to be ready
-		    for i in {1..60}; do
-		        if curl -s http://localhost:5001; then
-		            echo "MLflow server is up!"
-		            break
-		        fi
-		        echo "Waiting for MLflow server... ($i/60)"
-		        sleep 2
-		    done
-		    if ! curl -s http://localhost:5001; then
-		        echo "MLflow server did not start in time, checking final logs..."
-		        docker-compose logs mlflow
-		        exit 1
-		    fi
-		    # Wait for backend service to be ready
-		    echo "Waiting for backend service to be ready..."
-		    for i in {1..30}; do
-		        if docker-compose ps backend | grep "Up"; then
-		            echo "Backend service is up!"
-		            break
-		        fi
-		        echo "Waiting for backend service... ($i/30)"
-		        sleep 2
-		    done
-		    if ! docker-compose ps backend | grep "Up"; then
-		        echo "Backend service did not start in time, checking final logs..."
-		        docker-compose logs backend
-		        exit 1
-		    fi
-		'''
-		sh '''
-		    docker-compose exec backend python /app/main.py --prepare_data --train --evaluate --retrain
-		'''
-	    }
-	}
+            steps {
+                sh '''
+                    # Check and free port 5001 for MLflow
+                    PORT=5001
+                    if lsof -i:$PORT; then
+                        echo "Port $PORT is in use, attempting to free it..."
+                        PID=$(lsof -i:$PORT -t)
+                        kill -9 $PID
+                        echo "Port $PORT has been freed."
+                    else
+                        echo "Port $PORT is not in use."
+                    fi
+                    # Check and free port 8000 for backend
+                    PORT=8000
+                    if lsof -i:$PORT; then
+                        echo "Port $PORT is in use, attempting to free it..."
+                        PID=$(lsof -i:$PORT -t)
+                        kill -9 $PID
+                        echo "Port $PORT has been freed."
+                    else
+                        echo "Port $PORT is not in use."
+                    fi
+                '''
+                sh '''
+                    docker-compose down
+                    docker-compose build backend mlflow elasticsearch kibana
+                    docker-compose up -d backend mlflow elasticsearch kibana
+                    # Debug: Check initial logs for MLflow and backend
+                    echo "Checking initial MLflow server logs..."
+                    docker-compose logs mlflow
+                    echo "Checking initial backend service logs..."
+                    docker-compose logs backend
+                    # Wait for MLflow server to be ready
+                    for i in {1..60}; do
+                        if curl -s http://localhost:5001; then
+                            echo "MLflow server is up!"
+                            break
+                        fi
+                        echo "Waiting for MLflow server... ($i/60)"
+                        sleep 2
+                    done
+                    if ! curl -s http://localhost:5001; then
+                        echo "MLflow server did not start in time, checking final logs..."
+                        docker-compose logs mlflow
+                        exit 1
+                    fi
+                    # Wait for backend service to be ready
+                    echo "Waiting for backend service to be ready..."
+                    for i in {1..30}; do
+                        if docker-compose ps backend | grep "Up"; then
+                            echo "Backend service is up!"
+                            break
+                        fi
+                        echo "Waiting for backend service... ($i/30)"
+                        sleep 2
+                    done
+                    if ! docker-compose ps backend | grep "Up"; then
+                        echo "Backend service did not start in time, checking final logs..."
+                        docker-compose logs backend
+                        exit 1
+                    fi
+                '''
+                sh '''
+                    docker-compose exec backend python /app/main.py --prepare_data --train --evaluate --retrain
+                '''
+            }
+        }
     }
     post {
         always {
