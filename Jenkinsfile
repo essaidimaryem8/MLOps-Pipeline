@@ -85,7 +85,18 @@ pipeline {
         stage('Run Pipeline') {
             steps {
                 sh '''
+                    # Check and free port 5001 for MLflow
                     PORT=5001
+                    if lsof -i:$PORT; then
+                        echo "Port $PORT is in use, attempting to free it..."
+                        PID=$(lsof -i:$PORT -t)
+                        kill -9 $PID
+                        echo "Port $PORT has been freed."
+                    else
+                        echo "Port $PORT is not in use."
+                    fi
+                    # Check and free port 8000 for backend
+                    PORT=8000
                     if lsof -i:$PORT; then
                         echo "Port $PORT is in use, attempting to free it..."
                         PID=$(lsof -i:$PORT -t)
@@ -99,9 +110,11 @@ pipeline {
                     docker-compose down
                     docker-compose build backend mlflow elasticsearch kibana
                     docker-compose up -d backend mlflow elasticsearch kibana
-                    # Debug: Check MLflow server logs immediately after starting
+                    # Debug: Check initial logs for MLflow and backend
                     echo "Checking initial MLflow server logs..."
                     docker-compose logs mlflow
+                    echo "Checking initial backend service logs..."
+                    docker-compose logs backend
                     # Wait for MLflow server to be ready
                     for i in {1..60}; do
                         if curl -s http://localhost:5001; then
@@ -114,6 +127,21 @@ pipeline {
                     if ! curl -s http://localhost:5001; then
                         echo "MLflow server did not start in time, checking final logs..."
                         docker-compose logs mlflow
+                        exit 1
+                    fi
+                    # Wait for backend service to be ready
+                    echo "Waiting for backend service to be ready..."
+                    for i in {1..30}; do
+                        if docker-compose ps backend | grep "Up"; then
+                            echo "Backend service is up!"
+                            break
+                        fi
+                        echo "Waiting for backend service... ($i/30)"
+                        sleep 2
+                    done
+                    if ! docker-compose ps backend | grep "Up"; then
+                        echo "Backend service did not start in time, checking final logs..."
+                        docker-compose logs backend
                         exit 1
                     fi
                 '''
