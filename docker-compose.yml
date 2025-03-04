@@ -7,11 +7,14 @@ services:
       - "8000:8000"
     volumes:
       - ./backend:/app
+      - backend-data:/app/data  # Add named volume for /app/data
     depends_on:
       - elasticsearch
     environment:
       - MLFLOW_TRACKING_URI=http://mlflow:5000
       - ELASTICSEARCH_URL=http://elasticsearch:9200
+    networks:
+      - ml_network
 
   mlflow:
     build:
@@ -23,6 +26,8 @@ services:
       - ./mlruns:/mlruns
     environment:
       - MLFLOW_TRACKING_URI=file:///mlruns
+    networks:
+      - ml_network
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.14.3
@@ -31,6 +36,8 @@ services:
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=false
+    networks:
+      - ml_network
 
   kibana:
     image: docker.elastic.co/kibana/kibana:8.14.3
@@ -40,6 +47,8 @@ services:
       - elasticsearch
     environment:
       - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    networks:
+      - ml_network
 
   frontend:
     build:
@@ -51,7 +60,12 @@ services:
       - backend
     volumes:
       - ./frontend:/app
+    networks:
+      - ml_network
 
 networks:
   ml_network:
     driver: bridge
+
+volumes:
+  backend-data:  # Define the named volume for /app/data

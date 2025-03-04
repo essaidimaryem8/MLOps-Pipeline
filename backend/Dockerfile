@@ -8,6 +8,9 @@ WORKDIR /app
 COPY main.py .
 COPY model_pipeline/ ./model_pipeline/
 
+# Create /app/data directory and set ownership to myuser
+RUN mkdir -p /app/data && chown -R myuser:myuser /app /app/data && chmod -R 755 /app /app/data
+
 # Ensure the container runs as myuser
 USER myuser
 
