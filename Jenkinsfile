@@ -46,7 +46,7 @@ pipeline {
                             -e TESTING=true \
                             -w /app/backend \
                             essaidimaryem/ml-project:latest \
-                            pytest tests/test_main.py -v --cache-clear
+                            pytest tests/test_main.py -v --no-cache
                     '''
                 }
             }
@@ -73,6 +73,7 @@ pipeline {
                     sh '''
                         echo $DOCKER_CREDENTIALS_PSW | docker login -u $DOCKER_CREDENTIALS_USR --password-stdin
                         # Push images in parallel
+                        docker push essaidimaryem/ml-project:latest &
                         docker push essaidimaryem/ml-pipeline-backend:latest &
                         docker push essaidimaryem/ml-pipeline-frontend:latest &
                         wait
@@ -126,6 +127,7 @@ pipeline {
                     sh '''
                         # Clear mlruns directory to prevent permission issues in future runs
                         rm -rf mlruns || true
+                        rm -rf backend/.pytest_cache || true
                         docker-compose down || true
                     '''
                 }
