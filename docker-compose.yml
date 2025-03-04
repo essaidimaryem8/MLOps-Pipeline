@@ -11,7 +11,7 @@ services:
     depends_on:
       - elasticsearch
     environment:
-      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - MLFLOW_TRACKING_URI=http://mlflow:5001
       - ELASTICSEARCH_URL=http://elasticsearch:9200
     networks:
       - ml_network
