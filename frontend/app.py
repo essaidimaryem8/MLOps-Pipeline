@@ -2,11 +2,12 @@ import streamlit as st
 import requests
 import pandas as pd
 import os
+import json
 
 # Backend API URL (adjust based on your environment)
 BACKEND_URL = "http://backend:8000" if st._is_running_with_streamlit else "http://localhost:8000"
 
-# Selected features for prediction
+# Selected features for prediction (plus Churn for train data)
 SELECTED_FEATURES = [
     "Total day minutes",
     "International plan",
@@ -99,7 +100,7 @@ st.markdown("""
         font-size: 16px;
     }
     /* Input fields styling */
-    .stNumberInput, .stTextInput, .stFileUploader {
+    .stNumberInput, .stSelectbox, .stTextInput, .stFileUploader {
         background-color: #ffffff;
         border: 1px solid #dfe6e9;
         border-radius: 8px;
@@ -222,25 +223,141 @@ def dashboard_page():
                 train_data = train_data[train_columns]
                 test_data = test_data[test_columns]
 
-                # Save filtered data to temporary files
-                train_data.to_csv("temp_train.csv", index=False)
-                test_data.to_csv("temp_test.csv", index=False)
+                # Save filtered data to temporary files in /tmp
+                train_temp_path = "/tmp/temp_train.csv"
+                test_temp_path = "/tmp/temp_test.csv"
+                train_data.to_csv(train_temp_path, index=False)
+                test_data.to_csv(test_temp_path, index=False)
 
                 if st.button("Prepare Data (Upload)"):
-                    with open("temp_train.csv", "rb") as train_f, open("temp_test.csv", "rb") as test_f:
+                    with open(train_temp_path, "rb") as train_f, open(test_temp_path, "rb") as test_f:
                         files = {"train_file": train_f, "test_file": test_f}
                         try:
                             response = requests.post(f"{BACKEND_URL}/prepare_data", files=files)
                             if response.status_code == 200:
                                 st.success("Data prepared successfully!")
                             else:
-                                st.error(f"Error preparing data: {response.json().get('detail', 'Unknown error')}")
+                                error_detail = response.json().get('detail', 'Unknown error')
+                                st.error(f"Error preparing data: {error_detail}")
                         except Exception as e:
                             st.error(f"Error preparing data: {str(e)}")
+                        finally:
+                            # Clean up temporary files
+                            if os.path.exists(train_temp_path):
+                                os.remove(train_temp_path)
+                            if os.path.exists(test_temp_path):
+                                os.remove(test_temp_path)
 
         else:  # Manual Input
             st.markdown("**Enter Train and Test Data Manually**")
-            st.warning("Manual input for preparing datasets is not supported in this version. Please use the upload option.")
+            st.markdown("Enter at least one entry for both train and test datasets. Each entry represents a customer record.")
+
+            # Train Data Input
+            st.markdown("### Train Data Entries")
+            train_entries = []
+            with st.form("train_data_form"):
+                st.markdown("**Add Train Data Entry**")
+                total_day_minutes_train = st.number_input("Total Day Minutes (Train)", min_value=0.0, value=90.0, help="Enter total daily call minutes")
+                international_plan_train = st.selectbox("International Plan (Train)", ["No", "Yes"], help="Does the customer have an international plan?", key="intl_plan_train")
+                customer_service_calls_train = st.number_input("Customer Service Calls (Train)", min_value=0, value=1, help="Number of calls to customer service")
+                total_intl_minutes_train = st.number_input("Total International Minutes (Train)", min_value=0.0, value=6.0, help="Enter total international call minutes")
+                voice_mail_plan_train = st.selectbox("Voice Mail Plan (Train)", ["No", "Yes"], help="Does the customer have a voicemail plan?", key="vm_plan_train")
+                number_vmail_messages_train = st.number_input("Number of Voicemail Messages (Train)", min_value=0, value=0, help="Number of voicemail messages")
+                churn_train = st.selectbox("Churn (Train)", [False, True], help="Did the customer churn? (True/False)")
+
+                add_train_entry = st.form_submit_button("Add Train Entry")
+
+                if add_train_entry:
+                    train_entry = {
+                        "Total day minutes": total_day_minutes_train,
+                        "International plan": international_plan_train,
+                        "Customer service calls": customer_service_calls_train,
+                        "Total intl minutes": total_intl_minutes_train,
+                        "Voice mail plan": voice_mail_plan_train,
+                        "Number vmail messages": number_vmail_messages_train,
+                        "Churn": churn_train
+                    }
+                    if "train_entries" not in st.session_state:
+                        st.session_state.train_entries = []
+                    st.session_state.train_entries.append(train_entry)
+                    st.success("Train entry added! Add more entries or proceed to test data.")
+
+            # Display current train entries
+            if "train_entries" in st.session_state and st.session_state.train_entries:
+                train_entries = st.session_state.train_entries
+                st.markdown("**Current Train Entries**")
+                train_df = pd.DataFrame(train_entries)
+                st.dataframe(train_df)
+
+            # Test Data Input
+            st.markdown("### Test Data Entries")
+            test_entries = []
+            with st.form("test_data_form"):
+                st.markdown("**Add Test Data Entry**")
+                total_day_minutes_test = st.number_input("Total Day Minutes (Test)", min_value=0.0, value=90.0, help="Enter total daily call minutes")
+                international_plan_test = st.selectbox("International Plan (Test)", ["No", "Yes"], help="Does the customer have an international plan?", key="intl_plan_test")
+                customer_service_calls_test = st.number_input("Customer Service Calls (Test)", min_value=0, value=1, help="Number of calls to customer service")
+                total_intl_minutes_test = st.number_input("Total International Minutes (Test)", min_value=0.0, value=6.0, help="Enter total international call minutes")
+                voice_mail_plan_test = st.selectbox("Voice Mail Plan (Test)", ["No", "Yes"], help="Does the customer have a voicemail plan?", key="vm_plan_test")
+                number_vmail_messages_test = st.number_input("Number of Voicemail Messages (Test)", min_value=0, value=0, help="Number of voicemail messages")
+
+                add_test_entry = st.form_submit_button("Add Test Entry")
+
+                if add_test_entry:
+                    test_entry = {
+                        "Total day minutes": total_day_minutes_test,
+                        "International plan": international_plan_test,
+                        "Customer service calls": customer_service_calls_test,
+                        "Total intl minutes": total_intl_minutes_test,
+                        "Voice mail plan": voice_mail_plan_test,
+                        "Number vmail messages": number_vmail_messages_test
+                    }
+                    if "test_entries" not in st.session_state:
+                        st.session_state.test_entries = []
+                    st.session_state.test_entries.append(test_entry)
+                    st.success("Test entry added! Add more entries or prepare data.")
+
+            # Display current test entries
+            if "test_entries" in st.session_state and st.session_state.test_entries:
+                test_entries = st.session_state.test_entries
+                st.markdown("**Current Test Entries**")
+                test_df = pd.DataFrame(test_entries)
+                st.dataframe(test_df)
+
+            # Prepare Data Button for Manual Input
+            if ("train_entries" in st.session_state and st.session_state.train_entries) and \
+               ("test_entries" in st.session_state and st.session_state.test_entries):
+                if st.button("Prepare Data (Manual)"):
+                    # Convert entries to DataFrames
+                    train_df = pd.DataFrame(st.session_state.train_entries)
+                    test_df = pd.DataFrame(st.session_state.test_entries)
+
+                    # Save to temporary files in /tmp
+                    train_temp_path = "/tmp/temp_train_manual.csv"
+                    test_temp_path = "/tmp/temp_test_manual.csv"
+                    train_df.to_csv(train_temp_path, index=False)
+                    test_df.to_csv(test_temp_path, index=False)
+
+                    with open(train_temp_path, "rb") as train_f, open(test_temp_path, "rb") as test_f:
+                        files = {"train_file": train_f, "test_file": test_f}
+                        try:
+                            response = requests.post(f"{BACKEND_URL}/prepare_data", files=files)
+                            if response.status_code == 200:
+                                st.success("Data prepared successfully!")
+                                # Clear the session state entries after successful preparation
+                                st.session_state.train_entries = []
+                                st.session_state.test_entries = []
+                            else:
+                                error_detail = response.json().get('detail', 'Unknown error')
+                                st.error(f"Error preparing data: {error_detail}")
+                        except Exception as e:
+                            st.error(f"Error preparing data: {str(e)}")
+                        finally:
+                            # Clean up temporary files
+                            if os.path.exists(train_temp_path):
+                                os.remove(train_temp_path)
+                            if os.path.exists(test_temp_path):
+                                os.remove(test_temp_path)
 
     elif menu == "Train Model":
         st.markdown("<h2>Train Model</h2>", unsafe_allow_html=True)
@@ -250,7 +367,8 @@ def dashboard_page():
                 if response.status_code == 200:
                     st.success("Model trained successfully!")
                 else:
-                    st.error(f"Error training model: {response.json().get('detail', 'Unknown error')}")
+                    error_detail = response.json().get('detail', 'Unknown error')
+                    st.error(f"Error training model: {error_detail}")
             except Exception as e:
                 st.error(f"Error training model: {str(e)}")
 
@@ -263,7 +381,8 @@ def dashboard_page():
                     st.markdown("**Evaluation Metrics:**")
                     st.json(response.json())
                 else:
-                    st.error(f"Error evaluating model: {response.json().get('detail', 'Unknown error')}")
+                    error_detail = response.json().get('detail', 'Unknown error')
+                    st.error(f"Error evaluating model: {error_detail}")
             except Exception as e:
                 st.error(f"Error evaluating model: {str(e)}")
 
@@ -278,10 +397,11 @@ def dashboard_page():
             if predict_file:
                 predict_data = pd.read_csv(predict_file)
                 predict_data = predict_data[SELECTED_FEATURES]  # Filter to selected features
-                predict_data.to_csv("temp_predict.csv", index=False)
+                predict_temp_path = "/tmp/temp_predict.csv"
+                predict_data.to_csv(predict_temp_path, index=False)
 
                 if st.button("Predict (Upload)"):
-                    with open("temp_predict.csv", "rb") as pred_f:
+                    with open(predict_temp_path, "rb") as pred_f:
                         files = {"file": pred_f}
                         try:
                             response = requests.post(f"{BACKEND_URL}/predict", files=files)
@@ -290,18 +410,23 @@ def dashboard_page():
                                 st.markdown("**Predictions:**")
                                 st.json(predictions)
                             else:
-                                st.error(f"Error predicting: {response.json().get('detail', 'Unknown error')}")
+                                error_detail = response.json().get('detail', 'Unknown error')
+                                st.error(f"Error predicting: {error_detail}")
                         except Exception as e:
                             st.error(f"Error predicting: {str(e)}")
+                        finally:
+                            # Clean up temporary file
+                            if os.path.exists(predict_temp_path):
+                                os.remove(predict_temp_path)
 
         else:  # Manual Input
             st.markdown("**Enter Values Manually for Prediction**")
             with st.form("manual_input_form"):
                 total_day_minutes = st.number_input("Total Day Minutes", min_value=0.0, value=90.0, help="Enter total daily call minutes")
-                international_plan = st.selectbox("International Plan", ["No", "Yes"], help="Does the customer have an international plan?")
+                international_plan = st.selectbox("International Plan", ["No", "Yes"], help="Does the customer have an international plan?", key="intl_plan_predict")
                 customer_service_calls = st.number_input("Customer Service Calls", min_value=0, value=1, help="Number of calls to customer service")
                 total_intl_minutes = st.number_input("Total International Minutes", min_value=0.0, value=6.0, help="Enter total international call minutes")
-                voice_mail_plan = st.selectbox("Voice Mail Plan", ["No", "Yes"], help="Does the customer have a voicemail plan?")
+                voice_mail_plan = st.selectbox("Voice Mail Plan", ["No", "Yes"], help="Does the customer have a voicemail plan?", key="vm_plan_predict")
                 number_vmail_messages = st.number_input("Number of Voicemail Messages", min_value=0, value=0, help="Number of voicemail messages")
 
                 submitted = st.form_submit_button("Predict")
@@ -316,9 +441,10 @@ def dashboard_page():
                         "Voice mail plan": voice_mail_plan,
                         "Number vmail messages": number_vmail_messages
                     }])
-                    input_data.to_csv("temp_manual_predict.csv", index=False)
+                    manual_predict_temp_path = "/tmp/temp_manual_predict.csv"  # Use /tmp to avoid PermissionError
+                    input_data.to_csv(manual_predict_temp_path, index=False)
 
-                    with open("temp_manual_predict.csv", "rb") as pred_f:
+                    with open(manual_predict_temp_path, "rb") as pred_f:
                         files = {"file": pred_f}
                         try:
                             response = requests.post(f"{BACKEND_URL}/predict", files=files)
@@ -327,9 +453,14 @@ def dashboard_page():
                                 st.markdown("**Prediction Result:**")
                                 st.json(predictions)
                             else:
-                                st.error(f"Error predicting: {response.json().get('detail', 'Unknown error')}")
+                                error_detail = response.json().get('detail', 'Unknown error')
+                                st.error(f"Error predicting: {error_detail}")
                         except Exception as e:
                             st.error(f"Error predicting: {str(e)}")
+                        finally:
+                            # Clean up temporary file
+                            if os.path.exists(manual_predict_temp_path):
+                                os.remove(manual_predict_temp_path)
 
     elif menu == "Retrain Model":
         st.markdown("<h2>Retrain Model</h2>", unsafe_allow_html=True)
@@ -339,7 +470,8 @@ def dashboard_page():
                 if response.status_code == 200:
                     st.success("Model retrained successfully!")
                 else:
-                    st.error(f"Error retraining model: {response.json().get('detail', 'Unknown error')}")
+                    error_detail = response.json().get('detail', 'Unknown error')
+                    st.error(f"Error retraining model: {error_detail}")
             except Exception as e:
                 st.error(f"Error retraining model: {str(e)}")
 
