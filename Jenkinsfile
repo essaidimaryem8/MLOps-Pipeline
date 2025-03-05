@@ -103,107 +103,112 @@ pipeline {
                         retry_push essaidimaryem/ml-project:latest || exit 1
                         retry_push essaidimaryem/ml-pipeline-backend:latest || exit 1
                         retry_push essaidimaryem/ml-pipeline-frontend:latest || exit 1
+
+                        # Start the containers after pushing images
+                        docker-compose down
+                        # Remove the backend-data volume to ensure it is recreated and initialized
+                        docker volume rm ml-pipeline_backend-data || true
+                        docker-compose build backend mlflow elasticsearch kibana frontend
+                        docker-compose up -d backend mlflow elasticsearch kibana frontend
+
+                        # Debug: Check initial logs for all services
+                        echo "Checking initial MLflow server logs..."
+                        docker-compose logs mlflow
+                        echo "Checking initial backend service logs..."
+                        docker-compose logs backend
+                        echo "Checking initial frontend service logs..."
+                        docker-compose logs frontend
+                        echo "Checking initial elasticsearch service logs..."
+                        docker-compose logs elasticsearch
+                        echo "Checking initial kibana service logs..."
+                        docker-compose logs kibana
+
+                        # Wait for MLflow server to be ready
+                        for i in {1..60}; do
+                            if curl -s http://localhost:5001; then
+                                echo "MLflow server is up!"
+                                break
+                            fi
+                            echo "Waiting for MLflow server... ($i/60)"
+                            sleep 2
+                        done
+                        if ! curl -s http://localhost:5001; then
+                            echo "MLflow server did not start in time, checking final logs..."
+                            docker-compose logs mlflow
+                            exit 1
+                        fi
+
+                        # Wait for backend service to be ready
+                        echo "Waiting for backend service to be ready..."
+                        for i in {1..30}; do
+                            if docker-compose ps backend | grep "Up"; then
+                                echo "Backend service is up!"
+                                break
+                            fi
+                            echo "Waiting for backend service... ($i/30)"
+                            sleep 2
+                        done
+                        if ! docker-compose ps backend | grep "Up"; then
+                            echo "Backend service did not start in time, checking final logs..."
+                            docker-compose logs backend
+                            exit 1
+                        fi
+
+                        # Wait for frontend service to be ready
+                        echo "Waiting for frontend service to be ready..."
+                        for i in {1..30}; do
+                            if docker-compose ps frontend | grep "Up"; then
+                                echo "Frontend service is up!"
+                                break
+                            fi
+                            echo "Waiting for frontend service... ($i/30)"
+                            sleep 2
+                        done
+                        if ! docker-compose ps frontend | grep "Up"; then
+                            echo "Frontend service did not start in time, checking final logs..."
+                            docker-compose logs frontend
+                            exit 1
+                        fi
+
+                        # Verify all services are running
+                        docker-compose ps
                     '''
                 }
             }
         }
-        stage('Run Pipeline') {
-            steps {
-                sh '''
-                    # Check and free port 5001 for MLflow
-                    PORT=5001
-                    if lsof -i:$PORT; then
-                        echo "Port $PORT is in use, attempting to free it..."
-                        PID=$(lsof -i:$PORT -t)
-                        kill -9 $PID
-                        echo "Port $PORT has been freed."
-                    else
-                        echo "Port $PORT is not in use."
-                    fi
-                    # Check and free port 8000 for backend
-                    PORT=8000
-                    if lsof -i:$PORT; then
-                        echo "Port $PORT is in use, attempting to free it..."
-                        PID=$(lsof -i:$PORT -t)
-                        kill -9 $PID
-                        echo "Port $PORT has been freed."
-                    else
-                        echo "Port $PORT is not in use."
-                    fi
-                '''
-                sh '''
-                    docker-compose down
-                    # Remove the backend-data volume to ensure it is recreated and initialized
-                    docker volume rm ml-pipeline_backend-data || true
-                    docker-compose build backend mlflow elasticsearch kibana frontend
-                    docker-compose up -d backend mlflow elasticsearch kibana frontend
-                    # Debug: Check initial logs for MLflow and backend
-                    echo "Checking initial MLflow server logs..."
-                    docker-compose logs mlflow
-                    echo "Checking initial backend service logs..."
-                    docker-compose logs backend
-                    echo "Checking initial frontend service logs..."
-                    docker-compose logs frontend
-                    # Debug: Verify data files in /app/data
-                    echo "Checking data files in /app/data..."
-                    docker-compose exec backend ls -l /app/data
-                    # Wait for MLflow server to be ready
-                    for i in {1..60}; do
-                        if curl -s http://localhost:5001; then
-                            echo "MLflow server is up!"
-                            break
-                        fi
-                        echo "Waiting for MLflow server... ($i/60)"
-                        sleep 2
-                    done
-                    if ! curl -s http://localhost:5001; then
-                        echo "MLflow server did not start in time, checking final logs..."
-                        docker-compose logs mlflow
-                        exit 1
-                    fi
-                    # Wait for backend service to be ready
-                    echo "Waiting for backend service to be ready..."
-                    for i in {1..30}; do
-                        if docker-compose ps backend | grep "Up"; then
-                            echo "Backend service is up!"
-                            break
-                        fi
-                        echo "Waiting for backend service... ($i/30)"
-                        sleep 2
-                    done
-                    if ! docker-compose ps backend | grep "Up"; then
-                        echo "Backend service did not start in time, checking final logs..."
-                        docker-compose logs backend
-                        exit 1
-                    fi
-                    # Wait for frontend service to be ready
-                    echo "Waiting for frontend service to be ready..."
-                    for i in {1..30}; do
-                        if docker-compose ps frontend | grep "Up"; then
-                            echo "Frontend service is up!"
-                            break
-                        fi
-                        echo "Waiting for frontend service... ($i/30)"
-                        sleep 2
-                    done
-                    if ! docker-compose ps frontend | grep "Up"; then
-                        echo "Frontend service did not start in time, checking final logs..."
-                        docker-compose logs frontend
-                        exit 1
-                    fi
-                '''
-                sh '''
-                    docker-compose exec backend python /app/main.py --prepare_data --train --evaluate --retrain
-                '''
-            }
-        }
     }
     post {
-        always {
+        success {
             node('') {  // Use empty label to run on any available agent
                 dir(env.WORKSPACE) {
                     sh '''
+                        # On success, do not stop the containers to allow interaction
+                        echo "Pipeline completed successfully. Containers are still running."
+                        echo "Access the Streamlit interface at http://localhost:8501"
+                        echo "Access MLflow at http://localhost:5001"
+                        echo "Access Kibana at http://localhost:5601"
                         # Clear mlruns and pytest cache directories to prevent permission issues in future runs
+                        rm -rf mlruns || true
+                        rm -rf backend/.pytest_cache || true
+                    '''
+                }
+                sh '''
+                    docker system prune -f
+                '''
+                script {
+                    withCredentials([string(credentialsId: 'sender-email', variable: 'SENDER_EMAIL'), string(credentialsId: 'recipient-email', variable: 'RECIPIENT_EMAIL')]) {
+                        mail to: "${RECIPIENT_EMAIL}",
+                             subject: "Pipeline Succeeded: ${env.JOB_NAME} Build #${env.BUILD_NUMBER}",
+                             body: "The pipeline ${env.JOB_NAME} Build #${env.BUILD_NUMBER} has succeeded. Containers are running on the Jenkins host.\nAccess the Streamlit interface at http://localhost:8501\nAccess MLflow at http://localhost:5001\nAccess Kibana at http://localhost:5601\nCheck the logs at ${env.BUILD_URL}"
+                    }
+                }
+            }
+        }
+        failure {
+            node('') {  // Use empty label to run on any available agent
+                dir(env.WORKSPACE) {
+                    sh '''
+                        # On failure, stop the containers and clean up
                         rm -rf mlruns || true
                         rm -rf backend/.pytest_cache || true
                         docker-compose down || true
@@ -215,8 +220,8 @@ pipeline {
                 script {
                     withCredentials([string(credentialsId: 'sender-email', variable: 'SENDER_EMAIL'), string(credentialsId: 'recipient-email', variable: 'RECIPIENT_EMAIL')]) {
                         mail to: "${RECIPIENT_EMAIL}",
-                             subject: "Pipeline ${currentBuild.result == 'SUCCESS' ? 'Succeeded' : 'Failed'}: ${env.JOB_NAME} Build #${env.BUILD_NUMBER}",
-                             body: "The pipeline ${env.JOB_NAME} Build #${env.BUILD_NUMBER} has ${currentBuild.result == 'SUCCESS' ? 'succeeded' : 'failed'}. Check the logs at ${env.BUILD_URL}"
+                             subject: "Pipeline Failed: ${env.JOB_NAME} Build #${env.BUILD_NUMBER}",
+                             body: "The pipeline ${env.JOB_NAME} Build #${env.BUILD_NUMBER} has failed. Check the logs at ${env.BUILD_URL}"
                     }
                 }
             }
