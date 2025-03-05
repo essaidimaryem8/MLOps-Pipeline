@@ -45,33 +45,21 @@ SELECTED_FEATURES = [
 # Check if running in test mode (to disable MLflow)
 IS_TESTING = os.getenv("TESTING", "false") == "true"
 
-
 # Use MLFLOW_TRACKING_URI environment variable if set, otherwise determine based on environment
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI")
 if not MLFLOW_TRACKING_URI:
     if os.getenv("JENKINS", "false") == "true":
-        MLFLOW_TRACKING_URI = "http://localhost:5001"
+        MLFLOW_TRACKING_URI = "http://localhost:5000"  # MLflow server in Jenkins CI
     elif os.getenv("DOCKER", "false") == "true":
-        MLFLOW_TRACKING_URI = "http://mlflow:5001"
+        MLFLOW_TRACKING_URI = "http://mlflow:5000"  # Docker Compose network
     else:
-        MLFLOW_TRACKING_URI = "http://localhost:5001"
+        MLFLOW_TRACKING_URI = "http://localhost:5000"  # Local development in WSL 2
 
 mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
 
-
-# Ensure the GBM_Experiment exists
-experiment_name = "GBM_Experiment"
-if not IS_TESTING:
-    try:
-        experiment = mlflow.get_experiment_by_name(experiment_name)
-        if experiment is None:
-            mlflow.create_experiment(experiment_name)
-            experiment = mlflow.get_experiment_by_name(experiment_name)
-        experiment_id = experiment.experiment_id
-        mlflow.set_experiment(experiment_name)
-    except Exception as e:
-        logging.error(f"Failed to set MLflow experiment: {str(e)}")
-        raise
+# Only set up MLflow experiment if running the script directly and not in test mode
+if __name__ == "__main__" and not IS_TESTING:
+    mlflow.set_experiment("GBM_Experiment")
 
 
 @app.get("/")
@@ -144,11 +132,7 @@ async def prepare_data_endpoint(train_file: UploadFile = File(...), test_file: U
                 mlflow.log_artifact("model_pipeline/preprocessing.py", "code_artifact")
                 logging.info("Data preparation completed and saved.")
                 run_id = mlflow.active_run().info.run_id
-            send_email(
-                "Pipeline Step Completed: Prepare Data",
-                f"Data preparation completed. Run ID: {run_id}",
-                os.getenv("RECIPIENT_EMAIL", "maryem.essaidi@esprit.tn")
-            )
+            send_email("Pipeline Step Completed: Prepare Data", f"Data preparation completed. Run ID: {run_id}", os.getenv("RECIPIENT_EMAIL", "maryem.essaidi@esprit.tn"))
         else:
             logging.info("Skipping MLflow logging during tests.")
 
@@ -184,11 +168,7 @@ def train():
                 mlflow.log_artifact("model_pipeline/training.py", "code_artifact")
                 logging.info("Model training completed and saved.")
                 run_id = mlflow.active_run().info.run_id
-            send_email(
-                "Pipeline Step Completed: Train Model",
-                f"Model training completed. Run ID: {run_id}",
-                os.getenv("RECIPIENT_EMAIL", "maryem.essaidi@esprit.tn")
-            )
+            send_email("Pipeline Step Completed: Train Model", f"Model training completed. Run ID: {run_id}", os.getenv("RECIPIENT_EMAIL", "maryem.essaidi@esprit.tn"))
         else:
             logging.info("Skipping MLflow logging during tests.")
             X_train, X_test = joblib.load(PREPARED_DATA_PATH)
@@ -200,7 +180,7 @@ def train():
         return {"status": "Model trained successfully"}
     except Exception as e:
         logging.error(f"Error in training: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error in training: {str(e)}"))
+        raise HTTPException(status_code=500, detail=f"Error in training: {str(e)}")
 
 
 @app.get("/evaluate")
@@ -234,22 +214,15 @@ def evaluate():
                 mlflow.log_artifact("model_pipeline/evaluation.py", "code_artifact")
                 logging.info("Model evaluation completed.")
                 run_id = mlflow.active_run().info.run_id
-            message = (
-                f"Model evaluation completed. Metrics: Accuracy={metrics['accuracy']:.4f}, "
-                f"ROC AUC={metrics['roc_auc']:.4f}. Run ID: {run_id}"
-            )
-            send_email(
-                "Pipeline Step Completed: Evaluate Model",
-                message,
-                os.getenv("RECIPIENT_EMAIL", "maryem.essaidi@esprit.tn")
-            )
+            message = f"Model evaluation completed. Metrics: Accuracy={metrics['accuracy']:.4f}, ROC AUC={metrics['roc_auc']:.4f}. Run ID: {run_id}"
+            send_email("Pipeline Step Completed: Evaluate Model", message, os.getenv("RECIPIENT_EMAIL", "maryem.essaidi@esprit.tn"))
         else:
             logging.info("Skipping MLflow logging during tests.")
 
         return metrics
     except Exception as e:
         logging.error(f"Evaluation error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Evaluation error: {str(e)}"))
+        raise HTTPException(status_code=500, detail=f"Evaluation error: {str(e)}")
 
 
 @app.post("/predict")
@@ -278,18 +251,14 @@ def predict(file: UploadFile = File(...)):
                 mlflow.log_artifact(__file__, "code_artifact")
                 mlflow.log_artifact("model_pipeline/preprocessing.py", "code_artifact")
                 run_id = mlflow.active_run().info.run_id
-            send_email(
-                "Pipeline Step Completed: Predict",
-                f"Predictions completed. Run ID: {run_id}",
-                os.getenv("RECIPIENT_EMAIL", "maryem.essaidi@esprit.tn")
-            )
+            send_email("Pipeline Step Completed: Predict", f"Predictions completed. Run ID: {run_id}", os.getenv("RECIPIENT_EMAIL", "maryem.essaidi@esprit.tn"))
         else:
             logging.info("Skipping MLflow logging during tests.")
 
         return {"predictions": result}
     except Exception as e:
         logging.error(f"Prediction error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Prediction error: {str(e)}"))
+        raise HTTPException(status_code=500, detail=f"Prediction error: {str(e)}")
 
 
 @app.post("/retrain")
@@ -318,11 +287,7 @@ def retrain():
                 mlflow.log_artifact("model_pipeline/training.py", "code_artifact")
                 logging.info("Model retraining completed and saved.")
                 run_id = mlflow.active_run().info.run_id
-            send_email(
-                "Pipeline Step Completed: Retrain Model",
-                f"Model retraining completed. Run ID: {run_id}",
-                os.getenv("RECIPIENT_EMAIL", "maryem.essaidi@esprit.tn")
-            )
+            send_email("Pipeline Step Completed: Retrain Model", f"Model retraining completed. Run ID: {run_id}", os.getenv("RECIPIENT_EMAIL", "maryem.essaidi@esprit.tn"))
         else:
             logging.info("Skipping MLflow logging during tests.")
             X_train, X_test = joblib.load(PREPARED_DATA_PATH)
@@ -334,7 +299,7 @@ def retrain():
         return {"status": "Model retrained successfully"}
     except Exception as e:
         logging.error(f"Error in retraining: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error in retraining: {str(e)}"))
+        raise HTTPException(status_code=500, detail=f"Error in retraining: {str(e)}")
 
 
 @app.post("/login")
@@ -379,11 +344,7 @@ def run_pipeline(args):
                     mlflow.log_artifact("model_pipeline/preprocessing.py", "code_artifact")
                     logging.info("Data preparation completed and saved.")
                     run_id = mlflow.active_run().info.run_id
-                send_email(
-                    "Pipeline Step Completed: Prepare Data",
-                    f"Data preparation completed. Run ID: {run_id}",
-                    os.getenv("RECIPIENT_EMAIL", "maryem.essaidi@esprit.tn")
-                )
+                send_email("Pipeline Step Completed: Prepare Data", f"Data preparation completed. Run ID: {run_id}", os.getenv("RECIPIENT_EMAIL", "maryem.essaidi@esprit.tn"))
             else:
                 logging.info("Skipping MLflow logging during tests.")
 
@@ -406,11 +367,7 @@ def run_pipeline(args):
                     mlflow.log_artifact("model_pipeline/training.py", "code_artifact")
                     logging.info("Model training completed and saved.")
                     run_id = mlflow.active_run().info.run_id
-                send_email(
-                    "Pipeline Step Completed: Train Model",
-                    f"Model training completed. Run ID: {run_id}",
-                    os.getenv("RECIPIENT_EMAIL", "maryem.essaidi@esprit.tn")
-                )
+                send_email("Pipeline Step Completed: Train Model", f"Model training completed. Run ID: {run_id}", os.getenv("RECIPIENT_EMAIL", "maryem.essaidi@esprit.tn"))
             else:
                 logging.info("Skipping MLflow logging during tests.")
                 X_train, X_test = joblib.load(PREPARED_DATA_PATH)
@@ -447,15 +404,8 @@ def run_pipeline(args):
                     print(metrics["classification_report"])
                     logging.info("Model evaluation completed.")
                     run_id = mlflow.active_run().info.run_id
-                message = (
-                    f"Model evaluation completed. Metrics: Accuracy={metrics['accuracy']:.4f}, "
-                    f"ROC AUC={metrics['roc_auc']:.4f}. Run ID: {run_id}"
-                )
-                send_email(
-                    "Pipeline Step Completed: Evaluate Model",
-                    message,
-                    os.getenv("RECIPIENT_EMAIL", "maryem.essaidi@esprit.tn")
-                )
+                message = f"Model evaluation completed. Metrics: Accuracy={metrics['accuracy']:.4f}, ROC AUC={metrics['roc_auc']:.4f}. Run ID: {run_id}"
+                send_email("Pipeline Step Completed: Evaluate Model", message, os.getenv("RECIPIENT_EMAIL", "maryem.essaidi@esprit.tn"))
             else:
                 logging.info("Skipping MLflow logging during tests.")
 
@@ -478,11 +428,7 @@ def run_pipeline(args):
                     mlflow.log_artifact("model_pipeline/training.py", "code_artifact")
                     logging.info("Model retraining completed and saved.")
                     run_id = mlflow.active_run().info.run_id
-                send_email(
-                    "Pipeline Step Completed: Retrain Model",
-                    f"Model retraining completed. Run ID: {run_id}",
-                    os.getenv("RECIPIENT_EMAIL", "maryem.essaidi@esprit.tn")
-                )
+                send_email("Pipeline Step Completed: Retrain Model", f"Model retraining completed. Run ID: {run_id}", os.getenv("RECIPIENT_EMAIL", "maryem.essaidi@esprit.tn"))
             else:
                 logging.info("Skipping MLflow logging during tests.")
                 X_train, X_test = joblib.load(PREPARED_DATA_PATH)

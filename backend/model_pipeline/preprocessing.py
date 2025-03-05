@@ -37,31 +37,18 @@ def preprocess_data(train_data: pd.DataFrame, test_data: pd.DataFrame = None):
         if test_data is not None:
             test_data = test_data[SELECTED_FEATURES]
 
-        # Normalize Churn column in train_data
-        if 'Churn' in train_data.columns:
-            # Convert Churn to lowercase and standardize
-            train_data["Churn"] = train_data["Churn"].astype(str).str.lower()
-            train_data["Churn"] = train_data["Churn"].replace({'yes': 'yes', 'no': 'no', 'true': 'yes', 'false': 'no'})
-            # Convert to boolean for consistency
-            train_data["Churn"] = train_data["Churn"].map({'yes': 1, 'no': 0})
-
         # Encode categorical variables: 'International plan' and 'Voice mail plan'
         le = LabelEncoder()
         categorical_cols = ['International plan', 'Voice mail plan']
 
         for col in categorical_cols:
             if col in train_data.columns:
-                # Combine train and test data to ensure all labels are seen during fitting
+                train_data[col] = le.fit_transform(train_data[col])
                 if test_data is not None and col in test_data.columns:
-                    combined = pd.concat([train_data[col], test_data[col]], axis=0).astype(str).str.lower()
-                    le.fit(combined)
-                    train_data[col] = le.transform(train_data[col].astype(str).str.lower())
-                    test_data[col] = le.transform(test_data[col].astype(str).str.lower())
-                else:
-                    train_data[col] = le.fit_transform(train_data[col].astype(str).str.lower())
+                    test_data[col] = le.transform(test_data[col])
 
         if 'Churn' in train_data.columns:
-            # Ensure Churn is integer (already mapped to 0/1)
+            # Encode the target variable 'Churn'
             train_data['Churn'] = train_data['Churn'].astype(int)
 
             # Separate features and target
