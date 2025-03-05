@@ -16,6 +16,7 @@ SELECTED_FEATURES = [
     "Number vmail messages"
 ]
 
+
 # Initialize session state for login
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
@@ -27,18 +28,22 @@ st.markdown("""
     <style>
     /* Main container styling */
     .main {
-        background-color: #f5f5f5;
-        padding: 20px;
-        border-radius: 10px;
+        background-color: #f8f9fa;
+        padding: 30px;
+        border-radius: 15px;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
     }
     /* Sidebar styling */
     .css-1d391kg {
         background-color: #2c3e50;
         color: white;
+        padding-top: 20px;
     }
     .css-1d391kg .css-1v0mbdj {
         color: white !important;
-        font-weight: bold;
+        font-weight: 600;
+        font-size: 16px;
+        padding: 10px 20px;
     }
     .css-1d391kg .css-1v0mbdj:hover {
         background-color: #34495e;
@@ -48,57 +53,100 @@ st.markdown("""
     h1 {
         color: #2c3e50;
         text-align: center;
-        font-family: 'Arial', sans-serif;
+        font-family: 'Helvetica Neue', sans-serif;
+        font-weight: 700;
+        margin-bottom: 20px;
     }
     /* Subheader styling */
     h2 {
         color: #34495e;
-        font-family: 'Arial', sans-serif;
+        font-family: 'Helvetica Neue', sans-serif;
+        font-weight: 600;
+        margin-top: 20px;
+        margin-bottom: 15px;
     }
     /* Button styling */
     .stButton>button {
-        background-color: #3498db;
+        background-color: #1abc9c;
         color: white;
-        border-radius: 5px;
-        padding: 10px 20px;
-        font-family: 'Arial', sans-serif;
-        font-weight: bold;
+        border-radius: 8px;
+        padding: 12px 24px;
+        font-family: 'Helvetica Neue', sans-serif;
+        font-weight: 600;
+        font-size: 16px;
+        border: none;
+        transition: background-color 0.3s;
     }
     .stButton>button:hover {
-        background-color: #2980b9;
+        background-color: #16a085;
     }
-    /* Tabs styling */
-    .stTabs [data-baseweb="tab"] {
-        background-color: #ecf0f1;
-        border-radius: 5px 5px 0 0;
-        padding: 10px 20px;
-        font-family: 'Arial', sans-serif;
+    /* Selectbox (Tab replacement) styling */
+    .stSelectbox {
+        background-color: #ffffff;
+        border: 1px solid #dfe6e9;
+        border-radius: 8px;
+        padding: 10px;
+        font-family: 'Helvetica Neue', sans-serif;
+        font-size: 16px;
+        margin-bottom: 20px;
     }
-    .stTabs [data-baseweb="tab"][aria-selected="true"] {
-        background-color: #3498db;
-        color: white;
+    .stSelectbox > div > div {
+        background-color: #ffffff;
+        border-radius: 8px;
+    }
+    .stSelectbox > div > div > div {
+        font-family: 'Helvetica Neue', sans-serif;
+        font-size: 16px;
     }
     /* Input fields styling */
-    .stNumberInput, .stSelectbox, .stTextInput, .stFileUploader {
+    .stNumberInput, .stTextInput, .stFileUploader {
         background-color: #ffffff;
-        border: 1px solid #bdc3c7;
-        border-radius: 5px;
-        padding: 5px;
+        border: 1px solid #dfe6e9;
+        border-radius: 8px;
+        padding: 10px;
+        font-family: 'Helvetica Neue', sans-serif;
+        font-size: 16px;
+        margin-bottom: 15px;
+    }
+    .stNumberInput > div > div > input, .stTextInput > div > div > input {
+        font-family: 'Helvetica Neue', sans-serif;
+        font-size: 16px;
     }
     /* Success and error messages */
     .stSuccess {
         background-color: #d4edda;
         color: #155724;
-        border-radius: 5px;
-        padding: 10px;
-        font-family: 'Arial', sans-serif;
+        border-radius: 8px;
+        padding: 15px;
+        font-family: 'Helvetica Neue', sans-serif;
+        font-size: 16px;
+        margin-top: 10px;
     }
     .stError {
         background-color: #f8d7da;
         color: #721c24;
-        border-radius: 5px;
-        padding: 10px;
-        font-family: 'Arial', sans-serif;
+        border-radius: 8px;
+        padding: 15px;
+        font-family: 'Helvetica Neue', sans-serif;
+        font-size: 16px;
+        margin-top: 10px;
+    }
+    /* Form container */
+    .stForm {
+        background-color: #ffffff;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        margin-bottom: 20px;
+    }
+    /* Sidebar header */
+    .sidebar-header {
+        color: #ffffff;
+        font-family: 'Helvetica Neue', sans-serif;
+        font-weight: 700;
+        font-size: 20px;
+        margin-bottom: 20px;
+        text-align: center;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -136,7 +184,7 @@ def dashboard_page():
 
     # Sidebar menu
     with st.sidebar:
-        st.markdown(f"**Welcome, {st.session_state.username}!**", unsafe_allow_html=True)
+        st.markdown("<div class='sidebar-header'>Welcome, {}</div>".format(st.session_state.username), unsafe_allow_html=True)
         st.markdown("### Navigation Menu", unsafe_allow_html=True)
         menu = st.selectbox("Select an Action", [
             "Prepare Data",
@@ -156,9 +204,10 @@ def dashboard_page():
 
     elif menu == "Prepare Data":
         st.markdown("<h2>Prepare Data</h2>", unsafe_allow_html=True)
-        tab1, tab2 = st.tabs(["Upload Train/Test Sets", "Manual Input"])
-        
-        with tab1:
+        # Replace st.tabs with st.selectbox
+        prepare_option = st.selectbox("Choose Data Input Method", ["Upload Train/Test Sets", "Manual Input"], key="prepare_data_option")
+
+        if prepare_option == "Upload Train/Test Sets":
             st.markdown("**Upload Train and Test Datasets**")
             train_file = st.file_uploader("Upload Train Dataset (CSV)", type="csv", key="train_file")
             test_file = st.file_uploader("Upload Test Dataset (CSV)", type="csv", key="test_file")
@@ -189,7 +238,7 @@ def dashboard_page():
                         except Exception as e:
                             st.error(f"Error preparing data: {str(e)}")
 
-        with tab2:
+        else:  # Manual Input
             st.markdown("**Enter Train and Test Data Manually**")
             st.warning("Manual input for preparing datasets is not supported in this version. Please use the upload option.")
 
@@ -220,9 +269,10 @@ def dashboard_page():
 
     elif menu == "Predict":
         st.markdown("<h2>Predict Churn</h2>", unsafe_allow_html=True)
-        tab1, tab2 = st.tabs(["Upload Prediction Dataset", "Manual Input"])
+        # Replace st.tabs with st.selectbox
+        predict_option = st.selectbox("Choose Prediction Method", ["Upload Prediction Dataset", "Manual Input"], key="predict_option")
 
-        with tab1:
+        if predict_option == "Upload Prediction Dataset":
             st.markdown("**Upload Prediction Dataset**")
             predict_file = st.file_uploader("Upload Prediction Dataset (CSV)", type="csv", key="predict_file_upload")
             if predict_file:
@@ -244,7 +294,7 @@ def dashboard_page():
                         except Exception as e:
                             st.error(f"Error predicting: {str(e)}")
 
-        with tab2:
+        else:  # Manual Input
             st.markdown("**Enter Values Manually for Prediction**")
             with st.form("manual_input_form"):
                 total_day_minutes = st.number_input("Total Day Minutes", min_value=0.0, value=90.0, help="Enter total daily call minutes")
