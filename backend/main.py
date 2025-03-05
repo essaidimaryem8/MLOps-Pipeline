@@ -49,17 +49,28 @@ IS_TESTING = os.getenv("TESTING", "false") == "true"
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI")
 if not MLFLOW_TRACKING_URI:
     if os.getenv("JENKINS", "false") == "true":
-        MLFLOW_TRACKING_URI = "http://localhost:5000"  # MLflow server in Jenkins CI
+        MLFLOW_TRACKING_URI = "http://localhost:5001"
     elif os.getenv("DOCKER", "false") == "true":
-        MLFLOW_TRACKING_URI = "http://mlflow:5000"  # Docker Compose network
+        MLFLOW_TRACKING_URI = "http://mlflow:5001"
     else:
-        MLFLOW_TRACKING_URI = "http://localhost:5000"  # Local development in WSL 2
+        MLFLOW_TRACKING_URI = "http://localhost:5001"
 
 mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
 
-# Only set up MLflow experiment if running the script directly and not in test mode
-if __name__ == "__main__" and not IS_TESTING:
-    mlflow.set_experiment("GBM_Experiment")
+
+# Ensure the GBM_Experiment exists
+experiment_name = "GBM_Experiment"
+if not IS_TESTING:
+    try:
+        experiment = mlflow.get_experiment_by_name(experiment_name)
+        if experiment is None:
+            mlflow.create_experiment(experiment_name)
+            experiment = mlflow.get_experiment_by_name(experiment_name)
+        experiment_id = experiment.experiment_id
+        mlflow.set_experiment(experiment_name)
+    except Exception as e:
+        logging.error(f"Failed to set MLflow experiment: {str(e)}")
+        raise
 
 
 @app.get("/")
@@ -139,7 +150,7 @@ async def prepare_data_endpoint(train_file: UploadFile = File(...), test_file: U
         return {"status": "Data prepared successfully"}
     except Exception as e:
         logging.error(f"Error in data preparation: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error in data preparation: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error in data preparation: {str(e)}"))
 
 
 @app.post("/train")
@@ -180,7 +191,7 @@ def train():
         return {"status": "Model trained successfully"}
     except Exception as e:
         logging.error(f"Error in training: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error in training: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error in training: {str(e)}"))
 
 
 @app.get("/evaluate")
@@ -222,7 +233,7 @@ def evaluate():
         return metrics
     except Exception as e:
         logging.error(f"Evaluation error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Evaluation error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Evaluation error: {str(e)}"))
 
 
 @app.post("/predict")
@@ -258,7 +269,7 @@ def predict(file: UploadFile = File(...)):
         return {"predictions": result}
     except Exception as e:
         logging.error(f"Prediction error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Prediction error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Prediction error: {str(e)}"))
 
 
 @app.post("/retrain")
@@ -299,7 +310,7 @@ def retrain():
         return {"status": "Model retrained successfully"}
     except Exception as e:
         logging.error(f"Error in retraining: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error in retraining: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error in retraining: {str(e)}"))
 
 
 @app.post("/login")
