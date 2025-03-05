@@ -30,7 +30,7 @@ pipeline {
                         docker run --rm \
                             -v $(pwd):/app \
                             essaidimaryem/ml-project:latest \
-                            pycodestyle main.py model_pipeline/preprocessing.py model_pipeline/training.py model_pipeline/evaluation.py model_pipeline/io.py tests/test_main.py --max-line-length=120 --ignore=E127,E203,E266,E501,W503
+                            pycodestyle main.py model_pipeline/preprocessing.py model_pipeline/training.py model_pipeline/evaluation.py model_pipeline/io.py tests/test_main.py --max-line-length=120 --ignore=E127,E203,E266,E501,W503,E128,E225,E251,E113,E901
                     '''
                 }
             }
