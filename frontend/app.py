@@ -174,7 +174,8 @@ def login_page():
                     st.success("Login successful! Redirecting to dashboard...")
                     st.experimental_rerun()
                 else:
-                    st.error(f"Login failed: {response.json().get('detail', 'Unknown error')}")
+                    error_detail = response.json().get('detail', 'Unknown error')
+                    st.error(f"Login failed: {error_detail}")
             except Exception as e:
                 st.error(f"Error logging in: {str(e)}")
 
@@ -263,7 +264,7 @@ def dashboard_page():
                 total_intl_minutes_train = st.number_input("Total International Minutes (Train)", min_value=0.0, value=6.0, help="Enter total international call minutes")
                 voice_mail_plan_train = st.selectbox("Voice Mail Plan (Train)", ["No", "Yes"], help="Does the customer have a voicemail plan?", key="vm_plan_train")
                 number_vmail_messages_train = st.number_input("Number of Voicemail Messages (Train)", min_value=0, value=0, help="Number of voicemail messages")
-                churn_train = st.selectbox("Churn (Train)", [False, True], help="Did the customer churn? (True/False)")
+                churn_train = st.selectbox("Churn (Train)", ["Yes", "No"], help="Did the customer churn? (Yes/No)")  # Updated to Yes/No
 
                 add_train_entry = st.form_submit_button("Add Train Entry")
 
