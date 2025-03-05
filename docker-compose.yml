@@ -7,7 +7,7 @@ services:
       - "8000:8000"
     volumes:
       - ./backend:/app
-      - backend-data:/app/data  # Add named volume for /app/data
+      - backend-data:/app/data
     depends_on:
       - elasticsearch
     environment:
@@ -68,4 +68,4 @@ networks:
     driver: bridge
 
 volumes:
-  backend-data:  # Define the named volume for /app/data
+  backend-data:
