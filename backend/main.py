@@ -155,7 +155,7 @@ async def prepare_data_endpoint(train_file: UploadFile = File(...), test_file: U
         return {"status": "Data prepared successfully"}
     except Exception as e:
         logging.error(f"Error in data preparation: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error in data preparation: {str(e)}"))
+        raise HTTPException(status_code=500, detail=f"Error in data preparation: {str(e)}")
 
 
 @app.post("/train")
